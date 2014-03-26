@@ -44,7 +44,7 @@ setup(
     author_email='peterbe@mozilla.com',
     description="A cron job runner with self-healing and job dependencies.",
     long_description=README,
-    packages=['crontabber'],
+    packages=['crontabber', 'crontabber.tests'],
     include_package_data=True,
     install_requires=find_install_requires(),
     zip_safe=False,
