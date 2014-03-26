@@ -3,3 +3,4 @@ docs/_build/
 /dist/
 *.pyc
 __pycache__/
+crontabber.egg-info/

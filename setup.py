@@ -34,11 +34,6 @@ def find_install_requires():
             if x.strip() and not x.startswith('#')]
 
 
-LONG_DESCRIPTION = """
-Bla bla bla
-"""
-
-
 README = read('README.md')
 
 setup(
@@ -47,11 +42,11 @@ setup(
     url='https://github.com/mozilla/crontabber',
     author='Peter Bengtsson',
     author_email='peterbe@mozilla.com',
-    description="A crontab wrapper with self-healing and job dependencies",
-    long_description=LONG_DESCRIPTION,
+    description="A cron job runner with self-healing and job dependencies.",
+    long_description=README,
     packages=['crontabber'],
     include_package_data=True,
-    install_requires=find_install_requires,
+    install_requires=find_install_requires(),
     zip_safe=False,
     classifiers=[
         'Development Status :: 4 - Beta',
