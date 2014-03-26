@@ -129,13 +129,12 @@ class IntegrationTestCaseBase(TestCaseBase):
         'password=%(crontabber.database_password)s' % DSN
     )
 
+    def setUp(self):
+        super(IntegrationTestCaseBase, self).setUp()
+        self.conn = psycopg2.connect(self.dsn)
 
-    @classmethod
-    def setUpClass(cls):
-        super(IntegrationTestCaseBase, cls).setUpClass()
-        conn = psycopg2.connect(cls.dsn)
-
-        cursor = conn.cursor()
+        cursor = self.conn.cursor()
+        # I would do these in setUpClass if we could guarantee python 2.7
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS crontabber_state (
                 last_updated timestamp with time zone NOT NULL,
@@ -166,13 +165,7 @@ class IntegrationTestCaseBase(TestCaseBase):
                 exc_traceback text
             );
         """)
-        conn.commit()
 
-    def setUp(self):
-        super(IntegrationTestCaseBase, self).setUp()
-        self.conn = psycopg2.connect(self.dsn)
-
-        cursor = self.conn.cursor()
         cursor.execute('select count(*) from crontabber_state')
         if cursor.fetchone()[0] < 1:
             cursor.execute("""
