@@ -37,7 +37,8 @@ def find_install_requires():
 README = read('README.md')
 
 setup(
-    name="crontabber",
+    name='crontabber',
+    scripts=['run-crontabber'],
     version=find_version('crontabber', '__init__.py'),
     url='https://github.com/mozilla/crontabber',
     author='Peter Bengtsson',
