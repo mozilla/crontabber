@@ -16,7 +16,7 @@ from psycopg2.extensions import TRANSACTION_STATUS_IDLE
 from nose.plugins.attrib import attr
 from nose.tools import eq_
 
-from configman import ConfigurationManager
+from configman import ConfigurationManager, Namespace
 from crontabber import crontabber
 
 DATABASE_HOST = os.environ.get('DATABASE_HOST', 'localhost')
@@ -121,6 +121,37 @@ class IntegrationTestCaseBase(TestCaseBase):
     makes sure the `crontabber_state` class is emptied.
     """
 
+    app_name = 'Crontabber'
+    app_version = '1'
+    app_description = __doc__
+    metadata = ''
+
+    required_config = Namespace()
+    required_config.namespace('crontabber')
+    required_config.crontabber.add_option(
+        name='database_name',
+        default='test_crontabber',
+        doc='Name of database to manage',
+    )
+
+    required_config.crontabber.add_option(
+        name='database_hostname',
+        default='localhost',
+        doc='Hostname to connect to database',
+    )
+
+    required_config.crontabber.add_option(
+        name='database_username',
+        default='',
+        doc='Username to connect to database',
+    )
+
+    required_config.crontabber.add_option(
+        name='database_password',
+        default='',
+        doc='Password to connect to database',
+    )
+
     assert 'test' in DSN['crontabber.database_name']
     dsn = (
         'host=%(crontabber.database_hostname)s '
@@ -129,9 +160,31 @@ class IntegrationTestCaseBase(TestCaseBase):
         'password=%(crontabber.database_password)s' % DSN
     )
 
+    def get_standard_config(self):
+        config_manager = ConfigurationManager(
+            [self.required_config],
+            app_name='Crontabber',
+            app_description=__doc__,
+            # argv_source=[]
+        )
+
+        with config_manager.context() as config:
+            return config
+
     def setUp(self):
         super(IntegrationTestCaseBase, self).setUp()
-        self.conn = psycopg2.connect(self.dsn)
+        self.config = self.get_standard_config()
+        print self.config.keys()
+        # print self.config.database_name
+        # print self.config.database_hostname
+        dsn = (
+            'host=%(crontabber.database_hostname)s '
+            'dbname=%(crontabber.database_name)s '
+            'user=%(crontabber.database_username)s '
+            'password=%(crontabber.database_password)s' % self.config
+        )
+
+        self.conn = psycopg2.connect(dsn)
 
         cursor = self.conn.cursor()
         # I would do these in setUpClass if we could guarantee python 2.7

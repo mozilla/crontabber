@@ -16,7 +16,7 @@ import traceback
 
 from functools import partial
 
-from .dbapi2_util import (
+from dbapi2_util import (
     single_value_sql,
     SQLDidNotReturnSingleValue,
     execute_query_iter,
@@ -26,9 +26,9 @@ from .dbapi2_util import (
     execute_no_results,
 )
 
-from .generic_app import App, main
-from .datetimeutil import utc_now
-from .base import (
+from generic_app import App, main
+from datetimeutil import utc_now
+from base import (
     convert_frequency,
     FrequencyDefinitionError,
     reorder_dag
@@ -100,6 +100,11 @@ class StateDatabase(RequiredConfig):
 
     def __init__(self, config=None):
         self.config = config
+        print "IN STATET THING"
+        print config
+        print "CRONTABBER ITEMS"
+        print config.crontabber
+
         self.database = config.database_class(config)
         self.transaction = self.config.transaction_executor_class(
             self.config,

@@ -6,7 +6,7 @@ import collections
 import datetime
 import re
 
-from .datetimeutil import utc_now
+from datetimeutil import utc_now
 from configman import Namespace, RequiredConfig
 
 
