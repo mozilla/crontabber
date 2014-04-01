@@ -43,6 +43,7 @@ class TestSubprocessMixin(unittest.TestCase):
         exit_code, stdout, stderr = self.run_process(
             '%s --exit=9 -o Blather -e Error' % _SCRIPT
         )
+        print stdout, stderr
         eq_(exit_code, 9)
         eq_(stdout, 'Blather')
         eq_(stderr, 'Error')

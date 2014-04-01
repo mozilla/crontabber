@@ -15,8 +15,7 @@ import psycopg2
 from nose.plugins.attrib import attr
 from nose.tools import eq_, ok_, assert_raises
 
-from crontabber import crontabber
-from crontabber import base
+from crontabber import app, base
 from crontabber.datetimeutil import utc_now
 from configman import Namespace, ConfigurationManager
 from crontabber.mixins import (
@@ -137,19 +136,18 @@ class TestStateDatabase(IntegrationTestCaseBase):
 
     def setUp(self):
         super(TestStateDatabase, self).setUp()
-        required_config = crontabber.CronTabber.get_required_config()
-        config_manager = ConfigurationManager(
-            [required_config,
-             #logging_required_config(app_name)
-             ],
-            values_source_list=[DSN],
-            app_name='crontabber',
-            argv_source=[]
-        )
-
-        config = config_manager.get_config()
-        config.crontabber.logger = mock.Mock()
-        self.database = crontabber.StateDatabase(config.crontabber)
+        # required_config = app.CronTabber.get_required_config()
+        # config_manager = ConfigurationManager(
+        #     [required_config,
+        #      ],
+        #     values_source_list=[DSN, configman.environment],
+        #     app_name='crontabber',
+        #     argv_source=[]
+        # )
+        #
+        # config = config_manager.get_config()
+        # config.crontabber.logger = mock.Mock()
+        self.database = app.StateDatabase(self.config.crontabber)
 
     def test_has_data(self):
         ok_(not self.database.has_data())
@@ -346,10 +344,10 @@ class TestCrontabber(IntegrationTestCaseBase):
             return d.split('.')[0]
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             config['job'] = 'unheard-of-app-name'
             assert_raises(
-                crontabber.JobNotFoundError,
+                app.JobNotFoundError,
                 tab.main,
             )
             config['job'] = 'basic-job'
@@ -400,7 +398,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_one('crontabber.tests.test_crontabber.BasicJob')
             config.logger.info.assert_called_with('Ran BasicJob')
 
@@ -411,7 +409,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             assert tab.main() == 0
 
             infos = [x[0][0] for x in config.logger.info.call_args_list]
@@ -449,7 +447,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             structure = self._load_structure()
@@ -495,7 +493,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             infos = [x[0][0] for x in config.logger.info.call_args_list]
@@ -540,7 +538,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         # the BarJob one depends on FooJob but suppose that FooJob
         # hasn't never run
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             assert_raises(
                 base.CircularDAGError,
                 tab.run_all
@@ -554,7 +552,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         # the BarJob one depends on FooJob but suppose that FooJob
         # has run for but a very long time ago
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             infos = [x[0][0] for x in config.logger.info.call_args_list]
@@ -601,7 +599,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         # the BarJob one depends on FooJob but suppose that FooJob
         # has run for but a very long time ago
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             structure = self._load_structure()
@@ -613,7 +611,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             eq_(structure['bar']['depends_on'], ['foo'])
             eq_(structure['foobar']['depends_on'], ['foo', 'bar'])
 
-    @mock.patch('crontabber.crontabber.utc_now')
+    @mock.patch('crontabber.app.utc_now')
     def test_basic_run_job_with_hour(self, mocked_utc_now):
         config_manager = self._setup_config_manager(
             'crontabber.tests.test_crontabber.BasicJob|7d|03:00\n'
@@ -628,7 +626,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         mocked_utc_now.side_effect = mock_utc_now
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             infos = [x[0][0] for x in config.logger.info.call_args_list]
             infos = [x for x in infos if x.startswith('Ran ')]
@@ -645,7 +643,7 @@ class TestCrontabber(IntegrationTestCaseBase):
                 information['next_run'].strftime('%H:%M:%S'), '01:45:00'
             )
 
-    @mock.patch('crontabber.crontabber.utc_now')
+    @mock.patch('crontabber.app.utc_now')
     def test_list_jobs(self, mocked_utc_now):
         config_manager = self._setup_config_manager(
             'crontabber.tests.test_crontabber.SadJob|5h\n'
@@ -662,7 +660,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         mocked_utc_now.side_effect = mock_utc_now
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             old_stdout = sys.stdout
             new_stdout = StringIO()
             sys.stdout = new_stdout
@@ -729,7 +727,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             old_stderr = sys.stderr
             new_stderr = StringIO()
             sys.stderr = new_stderr
@@ -747,14 +745,14 @@ class TestCrontabber(IntegrationTestCaseBase):
 
     def test_configtest_not_found(self):
         assert_raises(
-            crontabber.JobNotFoundError,
+            app.JobNotFoundError,
             self._setup_config_manager,
             'crontabber.tests.test_crontabber.YYYYYY|3d'
         )
 
     def test_configtest_definition_error(self):
         assert_raises(
-            crontabber.JobDescriptionError,
+            app.JobDescriptionError,
             self._setup_config_manager,
             'crontabber.tests.test_crontabber.FooJob'
         )
@@ -765,7 +763,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             old_stderr = sys.stderr
             new_stderr = StringIO()
             sys.stderr = new_stderr
@@ -786,7 +784,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             old_stderr = sys.stderr
             new_stderr = StringIO()
             sys.stderr = new_stderr
@@ -806,7 +804,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             old_stderr = sys.stderr
             new_stderr = StringIO()
             sys.stderr = new_stderr
@@ -820,7 +818,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             ok_(output.count('FrequencyDefinitionError'))
             ok_('23:59' in output)
 
-    @mock.patch('crontabber.crontabber.utc_now')
+    @mock.patch('crontabber.app.utc_now')
     @mock.patch('crontabber.base.utc_now')
     def test_basic_job_at_specific_hour(self,
                                         mocked_utc_now,
@@ -840,7 +838,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         mocked_utc_now_2.side_effect = mock_utc_now
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             # if it never ran, no json_file would have been created
             ok_(not self._load_structure())
@@ -854,7 +852,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         mocked_utc_now_2.side_effect = mock_utc_now_2
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             structure = self._load_structure()
             assert structure
@@ -882,7 +880,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         mocked_utc_now_2.side_effect = mock_utc_now_3
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             structure = self._load_structure()
             assert structure
@@ -906,7 +904,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             infos = [x for x in infos if x.startswith('Ran ')]
             assert len(infos) == 2, infos
 
-    @mock.patch('crontabber.crontabber.utc_now')
+    @mock.patch('crontabber.app.utc_now')
     @mock.patch('crontabber.base.utc_now')
     def test_backfill_job_at_specific_hour(self,
                                            mocked_utc_now,
@@ -926,7 +924,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         mocked_utc_now_2.side_effect = mock_utc_now
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             # if it never ran, no json_file would have been created
             structure = self._load_structure()
@@ -945,7 +943,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         mocked_utc_now_2.side_effect = mock_utc_now_2
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             structure = self._load_structure()
             ok_(structure)
@@ -978,7 +976,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         mocked_utc_now_2.side_effect = mock_utc_now_3
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             structure = self._load_structure()
             ok_(structure)
@@ -1012,7 +1010,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             config.logger.info.assert_called_with('Ran PostgresSampleJob')
 
@@ -1027,7 +1025,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             (config.logger.info
              .assert_called_with('Ran PostgresTransactionSampleJob'))
@@ -1043,7 +1041,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             infos = [x[0][0] for x in config.logger.info.call_args_list]
             infos = [x for x in infos if x.startswith('Ran ')]
@@ -1063,7 +1061,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             infos = [x[0][0] for x in config.logger.info.call_args_list]
             infos = [x for x in infos if x.startswith('Ran ')]
@@ -1083,7 +1081,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             infos = [x[0][0] for x in config.logger.info.call_args_list]
             infos = [x for x in infos if x.startswith('Ran ')]
@@ -1102,7 +1100,7 @@ class TestCrontabber(IntegrationTestCaseBase):
 
         # first just run it as is
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             structure = self._load_structure()
@@ -1170,7 +1168,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             '.CertainDayHaterBackfillJob|1d'
         )
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             app_name = CertainDayHaterBackfillJob.app_name
@@ -1205,7 +1203,7 @@ class TestCrontabber(IntegrationTestCaseBase):
 
         # first just run it as is
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             structure = self._load_structure()
@@ -1260,7 +1258,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             structure = self._load_structure()
@@ -1275,7 +1273,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         ''')
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             structure = self._load_structure()
@@ -1284,8 +1282,8 @@ class TestCrontabber(IntegrationTestCaseBase):
             eq_(structure.keys(), ['foo'])
 
     # the reason we need to mock both is because both
-    # crontabber.crontabber and crontabber.base imports utc_now
-    @mock.patch('crontabber.crontabber.utc_now')
+    # app.CronTabber and crontabber.base imports utc_now
+    @mock.patch('crontabber.app.utc_now')
     @mock.patch('crontabber.base.utc_now')
     @mock.patch('time.sleep')
     def test_backfilling_with_configured_time_slow_job(self,
@@ -1331,7 +1329,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         mocked_utc_now_2.side_effect = mock_utc_now
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             assert len(SlowBackfillJob.times_used) == 1
@@ -1359,7 +1357,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             )
 
             eq_(
-                crontabber.utc_now().strftime('%H:%M:%S'),
+                app.utc_now().strftime('%H:%M:%S'),
                 '18:02:01'
             )
 
@@ -1369,7 +1367,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         now_time = now_time.replace(minute=1)
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             assert len(SlowBackfillJob.times_used) == 2
@@ -1392,7 +1390,7 @@ class TestCrontabber(IntegrationTestCaseBase):
                 '18:00:00'
             )
 
-    @mock.patch('crontabber.crontabber.utc_now')
+    @mock.patch('crontabber.app.utc_now')
     @mock.patch('crontabber.base.utc_now')
     @mock.patch('time.sleep')
     def test_slow_backfilled_timed_daily_job(self, time_sleep,
@@ -1421,11 +1419,11 @@ class TestCrontabber(IntegrationTestCaseBase):
         mocked_utc_now_2.side_effect = mock_utc_now
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
-            time_before = crontabber.utc_now()
+            tab = app.CronTabber(config)
+            time_before = app.utc_now()
             tab.run_all()
             eq_(len(SlowBackfillJob.times_used), 1)
-            time_after = crontabber.utc_now()
+            time_after = app.utc_now()
             # double-checking
             assert (time_after - time_before).seconds == 1
 
@@ -1442,7 +1440,7 @@ class TestCrontabber(IntegrationTestCaseBase):
 
             # pretend one day passes
             _extra_time.append(datetime.timedelta(days=1))
-            time_later = crontabber.utc_now()
+            time_later = app.utc_now()
             assert (time_later - time_after).days == 1
             assert (time_later - time_after).seconds == 0
             assert (time_later - time_before).days == 1
@@ -1463,7 +1461,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             information = structure['slow-backfill']
 
     @mock.patch('crontabber.base.utc_now')
-    @mock.patch('crontabber.crontabber.utc_now')
+    @mock.patch('crontabber.app.utc_now')
     @mock.patch('time.sleep')
     def test_slow_backfilled_timed_daily_job_first_failure(self,
                                                            time_sleep,
@@ -1493,7 +1491,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         mocked_utc_now_2.side_effect = mock_utc_now
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             eq_(len(SlowBackfillJob.times_used), 1)
 
@@ -1507,7 +1505,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         _extra_time.append(-datetime.timedelta(seconds=1))
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             eq_(len(SlowBackfillJob.times_used), 2)
 
@@ -1518,10 +1516,10 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
         BasicJob.times_used = []
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             config['reset-job'] = 'never-heard-of'
             assert_raises(
-                crontabber.JobNotFoundError,
+                app.JobNotFoundError,
                 tab.main,
             )
 
@@ -1548,7 +1546,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             'crontabber.tests.test_crontabber.FooJob|1d'
         )
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             stream = StringIO()
             exit_code = tab.nagios(stream=stream)
@@ -1561,7 +1559,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             'crontabber.tests.test_crontabber.BackfillbasedTrouble|1d'
         )
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             stream = StringIO()
             exit_code = tab.nagios(stream=stream)
@@ -1603,7 +1601,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             'crontabber.tests.test_crontabber.TroubleJob|1d'
         )
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             stream = StringIO()
             exit_code = tab.nagios(stream=stream)
@@ -1621,7 +1619,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             'crontabber.tests.test_crontabber.MoreTroubleJob|1d'
         )
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             stream = StringIO()
             exit_code = tab.nagios(stream=stream)
@@ -1646,7 +1644,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         # it should be run first, then BarJob and lastly FooBarJob because
         # FooBarJob depends on FooJob and BarJob.
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             structure = self._load_structure()
             ok_('foo' in structure)
@@ -1707,7 +1705,7 @@ class TestCrontabber(IntegrationTestCaseBase):
 
         try:
             with config_manager.context() as config:
-                tab = crontabber.CronTabber(config)
+                tab = app.CronTabber(config)
                 tab.run_all()
                 eq_(len(dates_used[FooBackfillJob]), 1)
                 eq_(len(dates_used[FooBackfillJob]), 1)
@@ -1801,7 +1799,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         raven_client_mocked.side_effect = fake_client
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             config.logger.info.assert_any_call(
@@ -1835,7 +1833,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         raven_client_mocked.side_effect = fake_client
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             config.logger.debug.assert_any_call(
@@ -1856,7 +1854,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         ok_(not cur.fetchall())
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             infos = [x[0][0] for x in config.logger.info.call_args_list]
             infos = [x for x in infos if x.startswith('Ran ')]
@@ -1887,7 +1885,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         ok_(not cur.fetchall())
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             infos = [x[0][0] for x in config.logger.info.call_args_list]
             infos = [x for x in infos if x.startswith('Ran ')]
@@ -1922,7 +1920,7 @@ class TestCrontabber(IntegrationTestCaseBase):
         ok_(not cur.fetchall())
 
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
             infos = [x[0][0] for x in config.logger.info.call_args_list]
             infos = [x for x in infos if x.startswith('Ran ')]
@@ -1948,7 +1946,7 @@ class TestCrontabber(IntegrationTestCaseBase):
 
         # first just run it as is
         with config_manager.context() as config:
-            tab = crontabber.CronTabber(config)
+            tab = app.CronTabber(config)
             tab.run_all()
 
             cur = self.conn.cursor()

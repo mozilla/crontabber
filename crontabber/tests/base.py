@@ -16,8 +16,9 @@ from psycopg2.extensions import TRANSACTION_STATUS_IDLE
 from nose.plugins.attrib import attr
 from nose.tools import eq_
 
-from configman import ConfigurationManager, Namespace
-from crontabber import crontabber
+import configman
+
+from crontabber import app
 
 DATABASE_HOST = os.environ.get('DATABASE_HOST', 'localhost')
 DATABASE_NAME = os.environ.get('DATABASE_NAME', 'test_crontabber')
@@ -43,7 +44,7 @@ class TestCaseBase(unittest.TestCase):
             shutil.rmtree(self.tempdir)
 
     def _setup_config_manager(self, jobs_string, extra_value_source=None):
-        """setup and return a ConfigurationManager and a the crontabber
+        """setup and return a configman.ConfigurationManager and a the crontabber
         json file.
             jobs_string - a formatted string list services to be offered
             config - a string representing a config file OR a mapping of
@@ -53,21 +54,22 @@ class TestCaseBase(unittest.TestCase):
 
         """
         mock_logging = mock.Mock()
-        required_config = crontabber.CronTabber.get_required_config()
+        required_config = app.CronTabber.get_required_config()
         #required_config.namespace('logging')
         required_config.add_option('logger', default=mock_logging)
 
-        json_file = os.path.join(self.tempdir, 'test.json')
+        # json_file = os.path.join(self.tempdir, 'test.json')
 
         value_source = [
-            os.environ,
+            configman.ConfigFileFutureProxy,
+            configman.environment,
             {
                 'logger': mock_logging,
                 'crontabber.jobs': jobs_string,
-                'crontabber.database_file': json_file,
+                # 'crontabber.database_file': json_file,
                 'admin.strict': True,
             },
-            DSN,
+        #    DSN,
             extra_value_source,
         ]
 
@@ -80,14 +82,13 @@ class TestCaseBase(unittest.TestCase):
         elif isinstance(extra_value_source, Mapping):
             value_source.append(extra_value_source)
 
-        config_manager = ConfigurationManager(
-            [required_config,
-             #logging_required_config(app_name)
-             ],
+        config_manager = configman.ConfigurationManager(
+            [required_config],
+            # values_source_list=[configman.environment],
             values_source_list=value_source,
-            app_name='crontabber',
+            app_name='test-crontabber',
             app_description=__doc__,
-            argv_source=[]
+            # argv_source=[]
         )
         return config_manager
 
@@ -99,8 +100,6 @@ class TestCaseBase(unittest.TestCase):
             seconds += hours * 60 * 60
 
         ## modify ALL last_run and next_run to pretend time has changed
-        #db = crontabber.JSONJobDatabase()
-        #db.load(json_file)
 
         def _wind(data):
             for key, value in data.items():
@@ -121,69 +120,72 @@ class IntegrationTestCaseBase(TestCaseBase):
     makes sure the `crontabber_state` class is emptied.
     """
 
-    app_name = 'Crontabber'
-    app_version = '1'
-    app_description = __doc__
-    metadata = ''
-
-    required_config = Namespace()
-    required_config.namespace('crontabber')
-    required_config.crontabber.add_option(
-        name='database_name',
-        default='test_crontabber',
-        doc='Name of database to manage',
-    )
-
-    required_config.crontabber.add_option(
-        name='database_hostname',
-        default='localhost',
-        doc='Hostname to connect to database',
-    )
-
-    required_config.crontabber.add_option(
-        name='database_username',
-        default='',
-        doc='Username to connect to database',
-    )
-
-    required_config.crontabber.add_option(
-        name='database_password',
-        default='',
-        doc='Password to connect to database',
-    )
-
-    assert 'test' in DSN['crontabber.database_name']
-    dsn = (
-        'host=%(crontabber.database_hostname)s '
-        'dbname=%(crontabber.database_name)s '
-        'user=%(crontabber.database_username)s '
-        'password=%(crontabber.database_password)s' % DSN
-    )
+    # app_name = 'Crontabber'
+    # app_version = '1'
+    # app_description = __doc__
+    # metadata = ''
+    #
+    # required_config = configman.Namespace()
+    # required_config.namespace('crontabber')
+    # required_config.crontabber.add_option(
+    #     name='database_name',
+    #     default='test_crontabber',
+    #     doc='Name of database to manage',
+    # )
+    #
+    # required_config.crontabber.add_option(
+    #     name='database_hostname',
+    #     default='localhost',
+    #     doc='Hostname to connect to database',
+    # )
+    #
+    # required_config.crontabber.add_option(
+    #     name='database_username',
+    #     default='',
+    #     doc='Username to connect to database',
+    # )
+    #
+    # required_config.crontabber.add_option(
+    #     name='database_password',
+    #     default='',
+    #     doc='Password to connect to database',
+    # )
 
     def get_standard_config(self):
-        config_manager = ConfigurationManager(
-            [self.required_config],
-            app_name='Crontabber',
+        config_manager = configman.ConfigurationManager(
+            # [self.required_config],
+            [app.CronTabber.get_required_config()],
+            values_source_list=[
+                configman.ConfigFileFutureProxy,
+                configman.environment,
+            ],
+            # app_name='crontabber',
+            # app_name=app.CronTabber.app_name,
+            app_name='test-crontabber',
             app_description=__doc__,
             # argv_source=[]
         )
 
         with config_manager.context() as config:
+            config.crontabber.logger = mock.Mock()
             return config
 
     def setUp(self):
         super(IntegrationTestCaseBase, self).setUp()
         self.config = self.get_standard_config()
-        print self.config.keys()
-        # print self.config.database_name
-        # print self.config.database_hostname
-        dsn = (
-            'host=%(crontabber.database_hostname)s '
-            'dbname=%(crontabber.database_name)s '
-            'user=%(crontabber.database_username)s '
-            'password=%(crontabber.database_password)s' % self.config
-        )
 
+        dsn = (
+            'host=%(database_hostname)s '
+            'dbname=%(database_name)s '
+            'user=%(database_username)s '
+            'password=%(database_password)s' % self.config.crontabber
+        )
+        if 'dbname=test' not in dsn:
+            raise ValueError(
+                'test database must be called test_ something or '
+                'else there is a risk you might be testing against a '
+                'real database'
+            )
         self.conn = psycopg2.connect(dsn)
 
         cursor = self.conn.cursor()

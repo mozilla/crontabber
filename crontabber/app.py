@@ -100,10 +100,6 @@ class StateDatabase(RequiredConfig):
 
     def __init__(self, config=None):
         self.config = config
-        print "IN STATET THING"
-        print config
-        print "CRONTABBER ITEMS"
-        print config.crontabber
 
         self.database = config.database_class(config)
         self.transaction = self.config.transaction_executor_class(
@@ -1146,4 +1142,8 @@ class CronTabber(App):
 
 
 if __name__ == '__main__':  # pragma: no cover
+    import sys, os
+    root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+    if root not in sys.path:
+        sys.path.append(root)
     sys.exit(main(CronTabber))

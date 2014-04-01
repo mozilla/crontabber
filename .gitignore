@@ -4,3 +4,4 @@ docs/_build/
 *.pyc
 __pycache__/
 crontabber.egg-info/
+test-crontabber.ini
