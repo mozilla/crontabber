@@ -156,39 +156,18 @@ class IntegrationTestCaseBase(TestCaseBase):
                 'real database'
             )
         self.conn = psycopg2.connect(dsn)
+        self._truncate()
 
+    def _truncate(self):
         cursor = self.conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS crontabber (
-                app_name text NOT NULL,
-                next_run timestamp with time zone,
-                first_run timestamp with time zone,
-                last_run timestamp with time zone,
-                last_success timestamp with time zone,
-                error_count integer DEFAULT 0,
-                depends_on text[],
-                last_error json
-            );
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS crontabber_log (
-                id SERIAL NOT NULL,
-                app_name text NOT NULL,
-                log_time timestamp with time zone DEFAULT now() NOT NULL,
-                duration interval,
-                success timestamp with time zone,
-                exc_type text,
-                exc_value text,
-                exc_traceback text
-            );
-        """)
-
-        # make absolutely sure we're starting with these clean
         self.conn.cursor().execute("""
             TRUNCATE crontabber, crontabber_log CASCADE;
         """)
         self.conn.commit()
-        assert self.conn.get_transaction_status() == TRANSACTION_STATUS_IDLE
+
+    def tearDown(self):
+        super(IntegrationTestCaseBase, self).tearDown()
+        self._truncate()
 
     def assertAlmostEqual(self, val1, val2):
         if (

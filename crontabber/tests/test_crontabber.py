@@ -136,17 +136,6 @@ class TestStateDatabase(IntegrationTestCaseBase):
 
     def setUp(self):
         super(TestStateDatabase, self).setUp()
-        # required_config = app.CronTabber.get_required_config()
-        # config_manager = ConfigurationManager(
-        #     [required_config,
-        #      ],
-        #     values_source_list=[DSN, configman.environment],
-        #     app_name='crontabber',
-        #     argv_source=[]
-        # )
-        #
-        # config = config_manager.get_config()
-        # config.crontabber.logger = mock.Mock()
         self.database = app.StateDatabase(self.config.crontabber)
 
     def test_has_data(self):

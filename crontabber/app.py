@@ -43,6 +43,30 @@ from configman import Namespace, RequiredConfig
 from configman.converters import class_converter, CannotConvertError
 
 
+CREATE_CRONTABBER_SQL = """
+    CREATE TABLE IF NOT EXISTS crontabber (
+        app_name text NOT NULL,
+        next_run timestamp with time zone,
+        first_run timestamp with time zone,
+        last_run timestamp with time zone,
+        last_success timestamp with time zone,
+        error_count integer DEFAULT 0,
+        depends_on text[],
+        last_error json
+    );
+"""
+CREATE_CRONTABBER_LOG_SQL ="""
+    CREATE TABLE IF NOT EXISTS crontabber_log (
+        id SERIAL NOT NULL,
+        app_name text NOT NULL,
+        log_time timestamp with time zone DEFAULT now() NOT NULL,
+        duration interval,
+        success timestamp with time zone,
+        exc_type text,
+        exc_value text,
+        exc_traceback text
+    );
+"""
 # a method decorator that indicates that the method defines a single transacton
 # on a database connection.  It invokes the method using the instance's
 # transaction object, automatically passing in the appropriate database
@@ -105,6 +129,14 @@ class StateDatabase(RequiredConfig):
         self.transaction = self.config.transaction_executor_class(
             self.config,
             self.database
+        )
+        self.transaction(
+            execute_no_results,
+            CREATE_CRONTABBER_SQL
+        )
+        self.transaction(
+            execute_no_results,
+            CREATE_CRONTABBER_LOG_SQL
         )
 
     def has_data(self):
