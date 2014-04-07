@@ -248,36 +248,36 @@ def _do_main(
     # function that accepts a DotDict derivative as its input parameter.
     app_definition = Namespace()
     app_definition.add_option(
-      'application',
-      doc='the fully qualified module or class of the application',
-      default=initial_app,
-      from_string_converter=class_converter
+        'application',
+        doc='the fully qualified module or class of the application',
+        default=initial_app,
+        from_string_converter=class_converter
     )
     try:
         app_name = initial_app.app_name  # this will be used as the default
                                          # b
         app_version = initial_app.app_version
         app_description = initial_app.app_description
-    except AttributeError, x:
-        raise AppDetailMissingError(str(x))
+    except AttributeError as x:
+        raise AppDetailMissingError(x)
 
     app_definition.add_aggregation(
-      'logger',
-      functools.partial(setup_logger, app_name)
+        'logger',
+        functools.partial(setup_logger, app_name)
     )
 
     definitions = (
-      app_definition,
-      logging_required_config(app_name)
+        app_definition,
+        logging_required_config(app_name)
     )
 
     config_manager = config_manager_cls(
-      definitions,
-      app_name=app_name,
-      app_version=app_version,
-      app_description=app_description,
-      values_source_list=values_source_list,
-      config_pathname=config_path
+        definitions,
+        app_name=app_name,
+        app_version=app_version,
+        app_description=app_description,
+        values_source_list=values_source_list,
+        config_pathname=config_path
     )
 
     def fix_exit_code(code):

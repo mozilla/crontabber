@@ -5,3 +5,5 @@ docs/_build/
 __pycache__/
 crontabber.egg-info/
 test-crontabber.ini
+exampleapp/crontabber.ini
+exampleapp/foo.log

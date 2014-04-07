@@ -38,7 +38,10 @@ README = read('README.md')
 
 setup(
     name='crontabber',
-    scripts=['run-crontabber'],
+    #scripts=['run-crontabber'],
+    entry_points={
+        'console_scripts': ['crontabber = crontabber.app:local_main']
+    },
     version=find_version('crontabber', '__init__.py'),
     url='https://github.com/mozilla/crontabber',
     author='Peter Bengtsson',
@@ -58,4 +61,5 @@ setup(
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
     test_suite='crontabber.tests',
+    tests_require=['nose'],
 )

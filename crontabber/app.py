@@ -622,12 +622,6 @@ class CronTabber(App):
     required_config.namespace('crontabber')
 
     required_config.crontabber.add_option(
-        name='database_file',
-        default='./crontabbers.json',
-        doc='Location of file where job execution logs are stored',
-    )
-
-    required_config.crontabber.add_option(
         name='state_database_class',
         default=StateDatabase,
         doc='Class to load and save the state and runs',
@@ -1173,9 +1167,13 @@ class CronTabber(App):
             return False
 
 
-if __name__ == '__main__':  # pragma: no cover
+def local_main():
     import sys, os
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     if root not in sys.path:
         sys.path.append(root)
     sys.exit(main(CronTabber))
+
+
+if __name__ == '__main__':  # pragma: no cover
+    local_main()
