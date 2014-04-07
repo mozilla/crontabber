@@ -37,3 +37,12 @@ that same command above.
 
 Also, if you want `nosetests` to *not* capture `stdout` add `-s` to that
 same command as above.
+
+## How to run the exampleapp
+
+The example app helps you set up a playground to play around with and
+test crontabber to gain a better understanding of how it works.
+
+The best place to start with is to read the `exampleapp/README.md` file
+and go through its steps. Once you get the basics to work you can start
+experimenting with adding your job classes.
