@@ -123,7 +123,8 @@ class IntegrationTestCaseBase(TestCaseBase):
     def get_standard_config(self):
         config_manager = configman.ConfigurationManager(
             # [self.required_config],
-            [app.CronTabber.get_required_config()],
+            [app.CronTabber.get_required_config(),
+             app.StateDatabase.get_required_config()],
             values_source_list=[
                 configman.ConfigFileFutureProxy,
                 configman.environment,
@@ -142,6 +143,8 @@ class IntegrationTestCaseBase(TestCaseBase):
     def setUp(self):
         super(IntegrationTestCaseBase, self).setUp()
         self.config = self.get_standard_config()
+        # instanciate one of these to make sure the tables are created
+        app.StateDatabase(self.config.crontabber)
 
         dsn = (
             'host=%(database_hostname)s '
