@@ -117,39 +117,8 @@ class TestCaseBase(unittest.TestCase):
 class IntegrationTestCaseBase(TestCaseBase):
     """Useful class for running integration tests related to crontabber apps
     since this class takes care of setting up a psycopg connection and it
-    makes sure the `crontabber_state` class is emptied.
+    makes sure the `crontabber` table is emptied.
     """
-
-    # app_name = 'Crontabber'
-    # app_version = '1'
-    # app_description = __doc__
-    # metadata = ''
-    #
-    # required_config = configman.Namespace()
-    # required_config.namespace('crontabber')
-    # required_config.crontabber.add_option(
-    #     name='database_name',
-    #     default='test_crontabber',
-    #     doc='Name of database to manage',
-    # )
-    #
-    # required_config.crontabber.add_option(
-    #     name='database_hostname',
-    #     default='localhost',
-    #     doc='Hostname to connect to database',
-    # )
-    #
-    # required_config.crontabber.add_option(
-    #     name='database_username',
-    #     default='',
-    #     doc='Username to connect to database',
-    # )
-    #
-    # required_config.crontabber.add_option(
-    #     name='database_password',
-    #     default='',
-    #     doc='Password to connect to database',
-    # )
 
     def get_standard_config(self):
         config_manager = configman.ConfigurationManager(
@@ -189,13 +158,6 @@ class IntegrationTestCaseBase(TestCaseBase):
         self.conn = psycopg2.connect(dsn)
 
         cursor = self.conn.cursor()
-        # I would do these in setUpClass if we could guarantee python 2.7
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS crontabber_state (
-                last_updated timestamp with time zone NOT NULL,
-                state text NOT NULL
-                );
-        """)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS crontabber (
                 app_name text NOT NULL,
@@ -221,31 +183,12 @@ class IntegrationTestCaseBase(TestCaseBase):
             );
         """)
 
-        cursor.execute('select count(*) from crontabber_state')
-        if cursor.fetchone()[0] < 1:
-            cursor.execute("""
-            INSERT INTO crontabber_state (state, last_updated)
-            VALUES ('{}', NOW());
-            """)
-        else:
-            cursor.execute("""
-            UPDATE crontabber_state SET state='{}';
-            """)
         # make absolutely sure we're starting with these clean
         self.conn.cursor().execute("""
             TRUNCATE crontabber, crontabber_log CASCADE;
         """)
         self.conn.commit()
         assert self.conn.get_transaction_status() == TRANSACTION_STATUS_IDLE
-
-    def tearDown(self):
-        super(IntegrationTestCaseBase, self).tearDown()
-        self.conn.cursor().execute("""
-            UPDATE crontabber_state SET state='{}';
-            TRUNCATE crontabber, crontabber_log CASCADE;
-        """)
-        self.conn.commit()
-        self.conn.close()
 
     def assertAlmostEqual(self, val1, val2):
         if (
