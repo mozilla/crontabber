@@ -9,6 +9,13 @@ License: [MPL 2](http://www.mozilla.org/MPL/2.0/)
 First you need to create a dedicated test database. We recommend you call
 it `test_crontabber`. Then you need the necessary credentials for it.
 
+Before running the tests you need to install some extras to be able to
+run tests at all:
+
+```
+pip install -r test-requirements.txt
+```
+
 Next, in the root directory of the project create a file called
 `test-crontabber.ini` and it should look something like this:
 

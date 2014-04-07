@@ -1,0 +1,3 @@
+# Stuff you need to be able to run tests
+nose
+mock

@@ -1,0 +1,20 @@
+# http://travis-ci.org/#!/mozilla/crontabber
+
+language: python
+
+python:
+    - 2.6
+    - 2.7
+
+before_install:
+    - pip install -r test-requirements.txt
+
+install:
+    - python setup.py install
+
+script:
+    - nosetests crontabber
+
+#notifications:
+#    irc:
+#        channels: "irc.mozilla.org#breakpad"

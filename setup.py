@@ -34,6 +34,12 @@ def find_install_requires():
             if x.strip() and not x.startswith('#')]
 
 
+def find_tests_require():
+    return [x.strip() for x in
+            read('test-requirements.txt').splitlines()
+            if x.strip() and not x.startswith('#')]
+
+
 README = read('README.md')
 
 setup(
@@ -61,5 +67,5 @@ setup(
         'Topic :: Software Development :: Libraries :: Python Modules',
     ],
     test_suite='crontabber.tests',
-    tests_require=['nose'],
+    tests_require=find_tests_require(),
 )
