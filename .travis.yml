@@ -6,8 +6,13 @@ python:
     - 2.6
     - 2.7
 
+addons:
+    postgresql: "9.2"
+
 before_install:
     - pip install -r test-requirements.txt
+    - psql -c 'create database travis_ci_test;' -U postgres
+    - cp test-crontabber.ini.travis test-crontabber.ini
 
 install:
     - python setup.py install
@@ -15,6 +20,6 @@ install:
 script:
     - nosetests crontabber
 
-#notifications:
-#    irc:
-#        channels: "irc.mozilla.org#breakpad"
+notifications:
+    irc:
+        channels: "irc.mozilla.org#breakpad"

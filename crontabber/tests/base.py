@@ -144,9 +144,10 @@ class IntegrationTestCaseBase(TestCaseBase):
             'user=%(database_username)s '
             'password=%(database_password)s' % self.config.crontabber
         )
-        if 'dbname=test' not in dsn:
+        if not ('dbname=test' in dsn or 'dbname=travis_ci_test'):
             raise ValueError(
-                'test database must be called test_ something or '
+                'test database must be called test_ something '
+                '(or travis_ci_test) or '
                 'else there is a risk you might be testing against a '
                 'real database'
             )
