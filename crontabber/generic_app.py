@@ -101,10 +101,7 @@ class LoggerWrapper(object):
 
     #--------------------------------------------------------------------------
     def executor_identity(self):
-        try:
-            return " - %s - " % self.config.executor_identity()
-        except KeyError:
-            return " - %s - " % threading.currentThread().getName()
+        return " - %s - " % threading.currentThread().getName()
 
     #--------------------------------------------------------------------------
     def debug(self, message, *args, **kwargs):

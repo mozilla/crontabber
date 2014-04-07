@@ -4,6 +4,8 @@
 
 import socket
 import contextlib
+import threading
+
 import psycopg2
 import psycopg2.extensions
 
@@ -181,7 +183,7 @@ class ConnectionContextPooled(ConnectionContext):  # pragma: no cover
             name - a name as a string
         """
         if not name:
-            name = self.config.executor_identity()
+            name = threading.current_thread().getName()
         if name in self.pool:
             #self.config.logger.debug('connection: %s', name)
             return self.pool[name]
