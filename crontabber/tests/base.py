@@ -12,7 +12,6 @@ from collections import Sequence, Mapping, defaultdict
 
 import mock
 import psycopg2
-from psycopg2.extensions import TRANSACTION_STATUS_IDLE
 from nose.plugins.attrib import attr
 from nose.tools import eq_
 
@@ -55,10 +54,7 @@ class TestCaseBase(unittest.TestCase):
         """
         mock_logging = mock.Mock()
         required_config = app.CronTabber.get_required_config()
-        #required_config.namespace('logging')
         required_config.add_option('logger', default=mock_logging)
-
-        # json_file = os.path.join(self.tempdir, 'test.json')
 
         value_source = [
             configman.ConfigFileFutureProxy,
@@ -66,10 +62,8 @@ class TestCaseBase(unittest.TestCase):
             {
                 'logger': mock_logging,
                 'crontabber.jobs': jobs_string,
-                # 'crontabber.database_file': json_file,
                 'admin.strict': True,
             },
-        #    DSN,
             extra_value_source,
         ]
 
@@ -84,11 +78,9 @@ class TestCaseBase(unittest.TestCase):
 
         config_manager = configman.ConfigurationManager(
             [required_config],
-            # values_source_list=[configman.environment],
             values_source_list=value_source,
             app_name='test-crontabber',
             app_description=__doc__,
-            # argv_source=[]
         )
         return config_manager
 
@@ -99,7 +91,7 @@ class TestCaseBase(unittest.TestCase):
         if hours:
             seconds += hours * 60 * 60
 
-        ## modify ALL last_run and next_run to pretend time has changed
+        # modify ALL last_run and next_run to pretend time has changed
 
         def _wind(data):
             for key, value in data.items():
@@ -162,7 +154,6 @@ class IntegrationTestCaseBase(TestCaseBase):
         self._truncate()
 
     def _truncate(self):
-        cursor = self.conn.cursor()
         self.conn.cursor().execute("""
             TRUNCATE crontabber, crontabber_log CASCADE;
         """)

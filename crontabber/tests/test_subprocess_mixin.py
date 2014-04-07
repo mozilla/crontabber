@@ -12,6 +12,7 @@ from crontabber.mixins import with_subprocess
 
 _SCRIPT = os.path.join(os.path.dirname(__file__), 'sampleapp.py')
 
+
 @with_subprocess
 class TestSubprocessMixin(unittest.TestCase):
 

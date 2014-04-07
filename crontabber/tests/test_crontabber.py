@@ -17,7 +17,7 @@ from nose.tools import eq_, ok_, assert_raises
 
 from crontabber import app, base
 from crontabber.datetimeutil import utc_now
-from configman import Namespace, ConfigurationManager
+from configman import Namespace
 from crontabber.mixins import (
     as_backfill_cron_app,
     with_postgres_transactions,
@@ -25,10 +25,10 @@ from crontabber.mixins import (
     with_single_postgres_transaction
 )
 
-from .base import DSN, IntegrationTestCaseBase
+from .base import IntegrationTestCaseBase
 
 
-#==============================================================================
+# =============================================================================
 class _Item(object):
 
     def __init__(self, name, depends_on):
@@ -130,7 +130,7 @@ class TestReordering(unittest.TestCase):
         )
 
 
-#==============================================================================
+# =============================================================================
 @attr(integration='postgres')
 class TestStateDatabase(IntegrationTestCaseBase):
 
@@ -300,7 +300,7 @@ class TestStateDatabase(IntegrationTestCaseBase):
         assert_raises(KeyError, self.database.pop, 'bar')
 
 
-#==============================================================================
+# =============================================================================
 @attr(integration='postgres')
 class TestCrontabber(IntegrationTestCaseBase):
 
@@ -406,7 +406,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             ok_('Ran FooJob' in infos)
             ok_('Ran BarJob' in infos)
             ok_(infos.index('Ran FooJob') <
-                            infos.index('Ran BarJob'))
+                infos.index('Ran BarJob'))
             count = len(infos)
 
             tab.run_all()
@@ -694,20 +694,16 @@ class TestCrontabber(IntegrationTestCaseBase):
                 key = re.findall('App name:\s+([\w-]+)', block)[0]
                 outputs[key] = block
 
-            ok_(re.findall('No previous run info',
-                                       outputs['sad'], re.I))
-            ok_(re.findall('Error',
-                                       outputs['trouble'], re.I))
-            ok_(re.findall('1 time',
-                                       outputs['trouble'], re.I))
-            ok_(re.findall('raise NameError',
-                                       outputs['trouble'], re.I))
+            ok_(re.findall('No previous run info', outputs['sad'], re.I))
+            ok_(re.findall('Error', outputs['trouble'], re.I))
+            ok_(re.findall('1 time', outputs['trouble'], re.I))
+            ok_(re.findall('raise NameError', outputs['trouble'], re.I))
             # since the exception type and exception value is also displayed
             # in the output we can expect these to be shown twice
             eq_(outputs['trouble'].count('NameError'), 2)
             eq_(outputs['trouble'].count('Trouble!!'), 2)
             ok_(re.findall('7d @ 03:00',
-                                       outputs['basic-job'], re.I))
+                           outputs['basic-job'], re.I))
 
     def test_configtest_ok(self):
         config_manager = self._setup_config_manager(
@@ -1112,7 +1108,6 @@ class TestCrontabber(IntegrationTestCaseBase):
             state = tab.job_database['foo-backfill']
             state['first_run'] -= interval
             state['last_success'] -= interval
-            #tab.database['foo-backfill'] = state
 
             state = self._wind_clock(state, days=1)
             tab.job_database['foo-backfill'] = state
@@ -1132,8 +1127,10 @@ class TestCrontabber(IntegrationTestCaseBase):
             day_before_yesterday = today - datetime.timedelta(days=2)
             for each in (today, yesterday, day_before_yesterday):
                 formatted = each.strftime('%Y-%m-%d')
-                ok_([x for x in infos
-                                 if formatted in x])
+                ok_([
+                    x for x in infos
+                    if formatted in x
+                ])
 
     def test_backfilling_failling_midway(self):
         """ this test simulates when you have something like this:
@@ -1235,8 +1232,10 @@ class TestCrontabber(IntegrationTestCaseBase):
             day_before_yesterday = today - datetime.timedelta(days=2)
             for each in (today, yesterday, day_before_yesterday):
                 formatted = each.strftime('%Y-%m-%d')
-                ok_([x for x in infos
-                                 if formatted in x])
+                ok_([
+                    x for x in infos
+                    if formatted in x
+                ])
 
     def test_run_with_excess_whitespace(self):
         # this test asserts a found bug where excess newlines
@@ -1483,9 +1482,6 @@ class TestCrontabber(IntegrationTestCaseBase):
             tab = app.CronTabber(config)
             tab.run_all()
             eq_(len(SlowBackfillJob.times_used), 1)
-
-            #db = crontabber.JSONJobDatabase()
-            #db.load(json_file)
             state = tab.job_database['slow-backfill']
             del state['last_success']
             tab.job_database['slow-backfill'] = state
@@ -1990,12 +1986,14 @@ class TestCrontabber(IntegrationTestCaseBase):
             day_before_yesterday = today - datetime.timedelta(days=2)
             for each in (today, yesterday, day_before_yesterday):
                 formatted = each.strftime('%Y-%m-%d')
-                ok_([x for x in infos
-                                 if formatted in x])
+                ok_([
+                    x for x in infos
+                    if formatted in x
+                ])
 
 
-#==============================================================================
-## Various mock jobs that the tests depend on
+# =============================================================================
+# Various mock jobs that the tests depend on
 class _Job(base.BaseCronApp):
 
     def run(self):
@@ -2151,8 +2149,10 @@ class CertainDayHaterBackfillJob(_BackfillJob):
     fail_on = None
 
     def run(self, date):
-        if (self.fail_on
-            and date.strftime('%m%d') == self.fail_on.strftime('%m%d')):
+        if (
+            self.fail_on and
+            date.strftime('%m%d') == self.fail_on.strftime('%m%d')
+        ):
             raise Exception("bad date!")
 
 

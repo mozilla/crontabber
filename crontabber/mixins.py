@@ -67,8 +67,7 @@ def with_transactional_resource(transactional_resource_class, resource_name):
         )
         cls.required_config[resource_name].add_option(
             '%s_transaction_executor_class' % resource_name,
-            default=
-            'crontabber.transaction_executor.TransactionExecutor',
+            default='crontabber.transaction_executor.TransactionExecutor',
             doc='a class that will execute transactions',
             from_string_converter=class_converter,
         )

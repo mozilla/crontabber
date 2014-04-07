@@ -55,7 +55,8 @@ CREATE_CRONTABBER_SQL = """
         last_error json
     );
 """
-CREATE_CRONTABBER_LOG_SQL ="""
+
+CREATE_CRONTABBER_LOG_SQL = """
     CREATE TABLE IF NOT EXISTS crontabber_log (
         id SERIAL NOT NULL,
         app_name text NOT NULL,
@@ -67,6 +68,8 @@ CREATE_CRONTABBER_LOG_SQL ="""
         exc_traceback text
     );
 """
+
+
 # a method decorator that indicates that the method defines a single transacton
 # on a database connection.  It invokes the method using the instance's
 # transaction object, automatically passing in the appropriate database
@@ -83,7 +86,6 @@ def database_transaction(transaction_object_name='transaction'):
             return x
         return _do_transaction
     return transaction_decorator
-
 
 
 class JobNotFoundError(Exception):
@@ -109,8 +111,7 @@ class StateDatabase(RequiredConfig):
     required_config = Namespace()
     required_config.add_option(
         'database_class',
-        default=
-        'crontabber.connection_context.ConnectionContext',
+        default='crontabber.connection_context.ConnectionContext',
         from_string_converter=class_converter,
         reference_value_from='resource.postgresql'
     )
@@ -437,7 +438,7 @@ def timesince(d, now):  # pragma: no cover
     return s
 
 
-#------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
 def _default_list_splitter(class_list_str):
     return [x.strip() for x in class_list_str.split(',')]
 
@@ -474,7 +475,7 @@ def classes_in_namespaces_converter_with_compression(
                           the classes returned by the list_converter function
                               """
 
-    #--------------------------------------------------------------------------
+    # -------------------------------------------------------------------------
     def class_list_converter(class_list_str):
         """This function becomes the actual converter used by configman to
         take a string and convert it into the nested sequence of Namespaces,
@@ -486,7 +487,7 @@ def classes_in_namespaces_converter_with_compression(
         else:
             raise TypeError('must be derivative of a basestring')
 
-        #======================================================================
+        # =====================================================================
         class InnerClassList(RequiredConfig):
             """This nested class is a proxy list for the classes.  It collects
             all the config requirements for the listed classes and places them
@@ -574,7 +575,6 @@ def get_extra_as_options(input_str):
         'frequency',
         doc='frequency',
         default=frequency,
-        #from_string_converter=int
         exclude_from_print_conf=True,
         exclude_from_dump_conf=True
     )
@@ -631,7 +631,6 @@ class CronTabber(App):
         'jobs',
         default='',
         from_string_converter=classes_in_namespaces_converter_with_compression(
-            #reference_namespace=required_config.crontabber,
             reference_namespace=Namespace(),
             list_splitter_fn=line_splitter,
             class_extractor=pipe_splitter,
@@ -648,8 +647,7 @@ class CronTabber(App):
     # for local use, independent of the JSONAndPostgresJobDatabase
     required_config.crontabber.add_option(
         'database_class',
-        default=
-        'crontabber.connection_context.ConnectionContext',
+        default='crontabber.connection_context.ConnectionContext',
         from_string_converter=class_converter,
         reference_value_from='resource.postgresql'
     )
@@ -1168,7 +1166,8 @@ class CronTabber(App):
 
 
 def local_main():
-    import sys, os
+    import sys
+    import os
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     if root not in sys.path:
         sys.path.append(root)

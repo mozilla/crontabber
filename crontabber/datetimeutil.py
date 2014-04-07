@@ -2,6 +2,7 @@ import datetime
 
 ZERO = datetime.timedelta(0)
 
+
 class UTC(datetime.tzinfo):
     """
     UTC implementation taken from Python's docs.
