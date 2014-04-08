@@ -9,7 +9,7 @@ from configman.dotdict import DotDict
 from crontabber.base import BaseCronApp
 import crontabber.mixins as ctm
 
-from crontabber.connection_context import ConnectionContext
+from crontabber.connection_factory import ConnectionFactory
 from crontabber.transaction_executor import TransactionExecutor
 
 
@@ -44,7 +44,7 @@ class TestCrontabMixins(unittest.TestCase):
 
     def test_with_transactional_resource(self):
         @ctm.with_transactional_resource(
-            'crontabber.connection_context.ConnectionContext',
+            'crontabber.connection_factory.ConnectionFactory',
             'database'
         )
         class Alpha(BaseCronApp):
@@ -68,7 +68,7 @@ class TestCrontabMixins(unittest.TestCase):
         ok_(hasattr(a, 'database_connection'))
         ok_(isinstance(
             a.database_connection,
-            ConnectionContext
+            ConnectionFactory
         ))
         ok_(hasattr(a, 'database_transaction'))
         ok_(isinstance(
@@ -78,7 +78,7 @@ class TestCrontabMixins(unittest.TestCase):
 
     def test_with_resource_connection_as_argument(self):
         @ctm.with_transactional_resource(
-            'crontabber.connection_context.ConnectionContext',
+            'crontabber.connection_factory.ConnectionFactory',
             'database'
         )
         @ctm.with_resource_connection_as_argument('database')
@@ -89,7 +89,7 @@ class TestCrontabMixins(unittest.TestCase):
 
     def test_with_subprocess_mixin(self):
         @ctm.with_transactional_resource(
-            'crontabber.connection_context.ConnectionContext',
+            'crontabber.connection_factory.ConnectionFactory',
             'database'
         )
         @ctm.with_single_transaction('database')
