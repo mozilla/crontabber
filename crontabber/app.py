@@ -150,14 +150,13 @@ class StateDatabase(RequiredConfig):
             return False
 
     def __iter__(self):
-        with self.database(name='crontabber-get-apps') as connection:
-            for each in execute_query_iter(
-                connection,
+        return iter([
+            record[0] for record in
+            self.transaction(
+                execute_query_fetchall,
                 "SELECT app_name FROM crontabber"
-            ):
-                yield each[0]
-            connection.commit()  # must not leave transaction open, this
-                                 # may be a pooled or shared connection
+            )
+        ])
 
     def __contains__(self, key):
         """return True if we have a job by this key"""
