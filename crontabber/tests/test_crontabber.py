@@ -136,7 +136,7 @@ class TestStateDatabase(IntegrationTestCaseBase):
 
     def setUp(self):
         super(TestStateDatabase, self).setUp()
-        self.database = app.StateDatabase(self.config.crontabber)
+        self.database = app.JobStateDatabase(self.config.crontabber)
 
     def test_has_data(self):
         ok_(not self.database.has_data())
@@ -416,9 +416,9 @@ class TestCrontabber(IntegrationTestCaseBase):
             eq_(count, count_after)
 
             # wind the clock forward by three days
-            combined_state = tab.job_database.copy()
+            combined_state = tab.job_state_database.copy()
             self._wind_clock(combined_state, days=3)
-            tab.job_database.update(combined_state)
+            tab.job_state_database.update(combined_state)
 
             tab.run_all()
             infos = [x[0][0] for x in config.logger.info.call_args_list]
@@ -549,12 +549,12 @@ class TestCrontabber(IntegrationTestCaseBase):
             # obvious
             eq_(infos, ['Ran FooJob', 'Ran BarJob'])
 
-            combined_state = tab.job_database.copy()
+            combined_state = tab.job_state_database.copy()
             self._wind_clock(combined_state, days=1, seconds=1)
-            tab.job_database.update(combined_state)
+            tab.job_state_database.update(combined_state)
 
             # this forces in crontabber instance to reload the JSON file
-            tab._database = None
+            tab._job_state_database = None
 
             tab.run_all()
             infos = [x[0][0] for x in config.logger.info.call_args_list]
@@ -566,9 +566,9 @@ class TestCrontabber(IntegrationTestCaseBase):
             )
 
             # repeat
-            combined_state = tab.job_database.copy()
+            combined_state = tab.job_state_database.copy()
             self._wind_clock(combined_state, days=2)
-            tab.job_database.update(combined_state)
+            tab.job_state_database.update(combined_state)
 
             # now, let's say FooJob hasn't errored but instead we try to run
             # the dependent and it shouldn't allow it
@@ -670,10 +670,10 @@ class TestCrontabber(IntegrationTestCaseBase):
             )
 
             tab.run_all()
-            assert 'sad' not in tab.job_database
-            assert 'basic-job' in tab.job_database
-            assert 'foo' in tab.job_database
-            assert 'trouble' in tab.job_database
+            assert 'sad' not in tab.job_state_database
+            assert 'basic-job' in tab.job_state_database
+            assert 'foo' in tab.job_state_database
+            assert 'trouble' in tab.job_state_database
             old_stdout = sys.stdout
             new_stdout = StringIO()
             sys.stdout = new_stdout
@@ -1032,7 +1032,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             infos = [x for x in infos if x.startswith('Ran ')]
             ok_('Ran PostgresSampleJob' not in infos)
 
-            information = tab.job_database['broken-pg-job']
+            information = tab.job_state_database['broken-pg-job']
             ok_(information['last_error'])
             ok_(
                 'ProgrammingError' in
@@ -1052,7 +1052,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             infos = [x for x in infos if x.startswith('Ran ')]
             ok_('Ran PostgresTransactionSampleJob' not in infos)
 
-            information = tab.job_database['broken-transaction-managed-pg-job']
+            information = tab.job_state_database['broken-transaction-managed-pg-job']
             ok_(information['last_error'])
             ok_(
                 'ProgrammingError' in
@@ -1125,12 +1125,12 @@ class TestCrontabber(IntegrationTestCaseBase):
 
             # now, pretend the last 2 days have failed
             interval = datetime.timedelta(days=2)
-            state = tab.job_database['foo-backfill']
+            state = tab.job_state_database['foo-backfill']
             state['first_run'] -= interval
             state['last_success'] -= interval
 
             state = self._wind_clock(state, days=1)
-            tab.job_database['foo-backfill'] = state
+            tab.job_state_database['foo-backfill'] = state
 
             tab.run_all()
 
@@ -1181,22 +1181,22 @@ class TestCrontabber(IntegrationTestCaseBase):
 
             # now, pretend the last 2 days have failed
             interval = datetime.timedelta(days=2)
-            state = tab.job_database[app_name]
+            state = tab.job_state_database[app_name]
             state['first_run'] -= interval
             state['last_success'] -= interval
 
             self._wind_clock(state, days=1)
-            tab.job_database[app_name] = state
+            tab.job_state_database[app_name] = state
 
             CertainDayHaterBackfillJob.fail_on = (
-                tab.job_database[app_name]['first_run'] + interval
+                tab.job_state_database[app_name]['first_run'] + interval
             )
 
-            first_last_success = tab.job_database[app_name]['last_success']
+            first_last_success = tab.job_state_database[app_name]['last_success']
             tab.run_all()
 
             # now, we expect the new last_success to be 1 day more
-            new_last_success = tab.job_database[app_name]['last_success']
+            new_last_success = tab.job_state_database[app_name]['last_success']
             eq_((new_last_success - first_last_success).days, 1)
 
     def test_backfilling_postgres_based_job(self):
@@ -1231,12 +1231,12 @@ class TestCrontabber(IntegrationTestCaseBase):
 
             # now, pretend the last 2 days have failed
             interval = datetime.timedelta(days=2)
-            state = tab.job_database['pg-backfill']
+            state = tab.job_state_database['pg-backfill']
             state['first_run'] -= interval
             state['last_success'] -= interval
 
             self._wind_clock(state, days=1)
-            tab.job_database['pg-backfill'] = state
+            tab.job_state_database['pg-backfill'] = state
 
             tab.run_all()
             previous_infos = infos
@@ -1502,9 +1502,9 @@ class TestCrontabber(IntegrationTestCaseBase):
             tab = app.CronTabber(config)
             tab.run_all()
             eq_(len(SlowBackfillJob.times_used), 1)
-            state = tab.job_database['slow-backfill']
+            state = tab.job_state_database['slow-backfill']
             del state['last_success']
-            tab.job_database['slow-backfill'] = state
+            tab.job_state_database['slow-backfill'] = state
 
         _extra_time.append(datetime.timedelta(days=1))
         _extra_time.append(-datetime.timedelta(seconds=1))
@@ -1578,16 +1578,16 @@ class TestCrontabber(IntegrationTestCaseBase):
 
             # run it a second time
             # wind the clock forward
-            state = tab.job_database['backfill-trouble']
+            state = tab.job_state_database['backfill-trouble']
             self._wind_clock(state, days=1)
-            tab.job_database['backfill-trouble'] = state
+            tab.job_state_database['backfill-trouble'] = state
 
-            state = tab.job_database['basic-job']
+            state = tab.job_state_database['basic-job']
             self._wind_clock(state, days=1)
-            tab.job_database['basic-job'] = state
+            tab.job_state_database['basic-job'] = state
 
             # this forces in crontabber instance to reload the JSON file
-            tab._database = None
+            tab._job_state_database = None
 
             tab.run_all()
             stream = StringIO()
@@ -1738,9 +1738,9 @@ class TestCrontabber(IntegrationTestCaseBase):
 
                 # Now, let the magic happen, we pretend time passes by 2 hours
                 # and run all jobs again
-                combined_state = tab.job_database.copy()
+                combined_state = tab.job_state_database.copy()
                 self._wind_clock(combined_state, hours=2)
-                tab.job_database.update(combined_state)
+                tab.job_state_database.update(combined_state)
 
                 # here, we go two hours later
                 tab.run_all()
@@ -1981,12 +1981,12 @@ class TestCrontabber(IntegrationTestCaseBase):
 
             # now, pretend the last 2 days have failed
             interval = datetime.timedelta(days=2)
-            state = tab.job_database[app_name]
+            state = tab.job_state_database[app_name]
             state['first_run'] -= interval
             state['last_success'] -= interval
 
             self._wind_clock(state, days=1)
-            tab.job_database[app_name] = state
+            tab.job_state_database[app_name] = state
 
             tab.run_all()
             previous_infos = infos

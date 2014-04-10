@@ -7,6 +7,9 @@ import time
 from configman.config_manager import RequiredConfig
 from configman import Namespace
 
+from dbapi2_util import DBApiUtilNonFatalBaseException
+
+
 #------------------------------------------------------------------------------
 def string_to_list_of_ints(a_string):
     a_string = a_string.replace('"', '')
@@ -43,12 +46,14 @@ class TransactionExecutor(RequiredConfig):
                 result = function(connection, *args, **kwargs)
                 connection.commit()
                 return result
-            except:
+            except BaseException, x:
                 connection.rollback()
                 self.config.logger.error(
                     'Exception raised during %s transaction',
                     self.connection_source_type,
                     exc_info=True)
+                if isinstance(x, DBApiUtilNonFatalBaseException):
+                    raise
                 self.db_conn_context_source.force_reconnect()
                 raise
 
@@ -83,7 +88,7 @@ class TransactionExecutorWithInfiniteBackoff(TransactionExecutor):
         'wait_log_interval' seconds with progress info."""
         for x in xrange(int(seconds)):
             if (self.config.wait_log_interval and
-                not x % self.config.wait_log_interval):
+                    not x % self.config.wait_log_interval):
                 self.config.logger.debug(
                     '%s: %dsec of %dsec' % (wait_reason, x, seconds)
                 )
@@ -107,6 +112,7 @@ class TransactionExecutorWithInfiniteBackoff(TransactionExecutor):
                     except:
                         connection.rollback()
                         raise
+
             except self.db_conn_context_source.conditional_exceptions, x:
                 # these exceptions may or may not be retriable
                 # the test is for is a last ditch effort to see if
@@ -123,11 +129,15 @@ class TransactionExecutorWithInfiniteBackoff(TransactionExecutor):
                     self.connection_source_type,
                     exc_info=True)
 
-            except self.db_conn_context_source.operational_exceptions:
+            except self.db_conn_context_source.operational_exceptions, x:
                 self.config.logger.critical(
                     '%s transaction error eligible for retry',
                     self.connection_source_type,
                     exc_info=True)
+
+            if isinstance(x, DBApiUtilNonFatalBaseException):
+                raise
+
             self.db_conn_context_source.force_reconnect()
             self.config.logger.debug(
                 'retry in %s seconds' % wait_in_seconds
@@ -142,7 +152,8 @@ class TransactionExecutorWithInfiniteBackoff(TransactionExecutor):
 
 #==============================================================================
 class TransactionExecutorWithLimitedBackoff(
-                                       TransactionExecutorWithInfiniteBackoff):
+    TransactionExecutorWithInfiniteBackoff
+):
     #--------------------------------------------------------------------------
     def backoff_generator(self):
         """Generate a series of integers used for the length of the sleep

@@ -75,7 +75,7 @@ CREATE_CRONTABBER_LOG_SQL = """
 # transaction object, automatically passing in the appropriate database
 # connection.  Any abnormal exit from the method will result in a 'rollback'
 # any normal exit will result in a 'commit'
-def database_transaction(transaction_object_name='transaction'):
+def database_transaction(transaction_object_name='transaction_executor'):
     def transaction_decorator(method):
         def _do_transaction(self, *args, **kwargs):
             x = getattr(self, transaction_object_name)(
@@ -107,7 +107,7 @@ class BrokenJSONError(ValueError):
 _marker = object()
 
 
-class StateDatabase(RequiredConfig):
+class JobStateDatabase(RequiredConfig):
     required_config = Namespace()
     required_config.add_option(
         'database_class',
@@ -126,23 +126,23 @@ class StateDatabase(RequiredConfig):
     def __init__(self, config=None):
         self.config = config
 
-        self.database = config.database_class(config)
-        self.transaction = self.config.transaction_executor_class(
+        self.database_connection_factory = config.database_class(config)
+        self.transaction_executor = self.config.transaction_executor_class(
             self.config,
-            self.database
+            self.database_connection_factory
         )
-        self.transaction(
+        self.transaction_executor(
             execute_no_results,
             CREATE_CRONTABBER_SQL
         )
-        self.transaction(
+        self.transaction_executor(
             execute_no_results,
             CREATE_CRONTABBER_LOG_SQL
         )
 
     def has_data(self):
         try:
-            return bool(self.transaction(
+            return bool(self.transaction_executor(
                 single_value_sql,
                 "SELECT COUNT(*) FROM crontabber"
             ))
@@ -152,7 +152,7 @@ class StateDatabase(RequiredConfig):
     def __iter__(self):
         return iter([
             record[0] for record in
-            self.transaction(
+            self.transaction_executor(
                 execute_query_fetchall,
                 "SELECT app_name FROM crontabber"
             )
@@ -161,7 +161,7 @@ class StateDatabase(RequiredConfig):
     def __contains__(self, key):
         """return True if we have a job by this key"""
         try:
-            self.transaction(
+            self.transaction_executor(
                 single_value_sql,
                 """SELECT app_name
                    FROM crontabber
@@ -199,7 +199,7 @@ class StateDatabase(RequiredConfig):
             'depends_on', 'error_count', 'last_error'
         )
         items = []
-        for record in self.transaction(execute_query_fetchall, sql):
+        for record in self.transaction_executor(execute_query_fetchall, sql):
             row = dict(zip(columns, record))
             if isinstance(row['last_error'], basestring):
                 row['last_error'] = json.loads(row['last_error'])
@@ -232,7 +232,7 @@ class StateDatabase(RequiredConfig):
             'depends_on', 'error_count', 'last_error'
         )
         try:
-            record = self.transaction(single_row_sql, sql, (key,))
+            record = self.transaction_executor(single_row_sql, sql, (key,))
         except SQLDidNotReturnSingleRow:
             raise KeyError(key)
         row = dict(zip(columns, record))
@@ -623,8 +623,8 @@ class CronTabber(App):
     required_config.namespace('crontabber')
 
     required_config.crontabber.add_option(
-        name='state_database_class',
-        default=StateDatabase,
+        name='job_state_db_class',
+        default=JobStateDatabase,
         doc='Class to load and save the state and runs',
     )
 
@@ -724,11 +724,13 @@ class CronTabber(App):
 
     def __init__(self, config):
         super(CronTabber, self).__init__(config)
-        self.database_connection_source = \
+        self.database_connection_factory = \
             self.config.crontabber.database_class(config.crontabber)
-        self.transaction = self.config.crontabber.transaction_executor_class(
-            config.crontabber,
-            self.database_connection_source
+        self.transaction_executor = (
+            self.config.crontabber.transaction_executor_class(
+                config.crontabber,
+                self.database_connection_factory
+            )
         )
 
     def main(self):
@@ -764,12 +766,12 @@ class CronTabber(App):
         )
 
     @property
-    def job_database(self):
-        if not getattr(self, '_database', None):
-            self._database = self.config.crontabber.state_database_class(
+    def job_state_database(self):
+        if not getattr(self, '_job_state_db', None):
+            self._job_state_database = self.config.crontabber.job_state_db_class(
                 self.config.crontabber
             )
-        return self._database
+        return self._job_state_database
 
     def nagios(self, stream=sys.stdout):
         """
@@ -781,8 +783,8 @@ class CronTabber(App):
         warnings = []
         criticals = []
         for class_name, job_class in self.config.crontabber.jobs.class_list:
-            if job_class.app_name in self.job_database:
-                info = self.job_database.get(job_class.app_name)
+            if job_class.app_name in self.job_state_database:
+                info = self.job_state_database.get(job_class.app_name)
                 if not info.get('error_count', 0):
                     continue
                 error_count = info['error_count']
@@ -835,7 +837,7 @@ class CronTabber(App):
             print >>stream, 'App name:'.ljust(PAD), job_class.app_name
             print >>stream, 'Frequency:'.ljust(PAD), freq
             try:
-                info = self.job_database[job_class.app_name]
+                info = self.job_state_database[job_class.app_name]
             except KeyError:
                 print >>stream, '*NO PREVIOUS RUN INFO*'
                 continue
@@ -877,9 +879,9 @@ class CronTabber(App):
                 job_class.app_name == description or
                 description == job_class.__module__ + '.' + job_class.__name__
             ):
-                if job_class.app_name in self.job_database:
+                if job_class.app_name in self.job_state_database:
                     self.config.logger.info('App reset')
-                    self.job_database.pop(job_class.app_name)
+                    self.job_state_database.pop(job_class.app_name)
                 else:
                     self.config.logger.warning('App already reset')
                 return
@@ -925,7 +927,7 @@ class CronTabber(App):
 
         _debug('about to run %r', job_class)
         app_name = job_class.app_name
-        info = self.job_database.get(app_name)
+        info = self.job_state_database.get(app_name)
 
         last_success = None
         now = utc_now()
@@ -1042,7 +1044,7 @@ class CronTabber(App):
             depends_on = [depends_on]
         for dependency in depends_on:
             try:
-                job_info = self.job_database[dependency]
+                job_info = self.job_state_database[dependency]
             except KeyError:
                 # the job this one depends on hasn't been run yet!
                 return False, "%r hasn't been run yet" % dependency
@@ -1063,7 +1065,7 @@ class CronTabber(App):
         """
         app_name = class_.app_name
         try:
-            info = self.job_database[app_name]
+            info = self.job_state_database[app_name]
         except KeyError:
             if time_:
                 h, m = [int(x) for x in time_.split(':')]
@@ -1091,7 +1093,7 @@ class CronTabber(App):
                  exc_type, exc_value, exc_tb):
         assert inspect.isclass(class_)
         app_name = class_.app_name
-        info = self.job_database.get(app_name, {})
+        info = self.job_state_database.get(app_name, {})
         depends_on = getattr(class_, 'depends_on', [])
         if isinstance(depends_on, basestring):
             depends_on = [depends_on]
@@ -1129,7 +1131,7 @@ class CronTabber(App):
             info['last_error'] = {}
             info['error_count'] = 0
 
-        self.job_database[app_name] = info
+        self.job_state_database[app_name] = info
 
     def configtest(self):
         """return true if all configured jobs are configured OK"""
