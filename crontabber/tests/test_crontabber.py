@@ -1039,6 +1039,26 @@ class TestCrontabber(IntegrationTestCaseBase):
                 information['last_error']['type']
             )
 
+    def test_execute_failing_postgres_transaction_managed_job(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.'
+            'BrokenPostgresTransactionManagedSampleJob|1d'
+        )
+
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            tab.run_all()
+            infos = [x[0][0] for x in config.logger.info.call_args_list]
+            infos = [x for x in infos if x.startswith('Ran ')]
+            ok_('Ran PostgresTransactionSampleJob' not in infos)
+
+            information = tab.job_database['broken-transaction-managed-pg-job']
+            ok_(information['last_error'])
+            ok_(
+                'ProgrammingError' in
+                information['last_error']['type']
+            )
+
     def test_own_required_config_job(self):
         config_manager = self._setup_config_manager(
             'crontabber.tests.test_crontabber'
@@ -2088,6 +2108,15 @@ class PostgresTransactionSampleJob(_PGTransactionManagedJob):
 
 class BrokenPostgresSampleJob(_PGJob):
     app_name = 'broken-pg-job'
+
+    def run(self, connection):
+        cursor = connection.cursor()
+        cursor.execute('INSERT INTO test_cron_victim (time) VALUES (now())')
+        raise psycopg2.ProgrammingError("Egads!")
+
+
+class BrokenPostgresTransactionManagedSampleJob(_PGTransactionManagedJob):
+    app_name = 'broken-transaction-managed-pg-job'
 
     def run(self, connection):
         cursor = connection.cursor()

@@ -45,7 +45,7 @@ def with_transactional_resource(transactional_resource_class, resource_name):
     parameters:
         transactional_resource_class - a string representing the full path of
             the class that represents a connection to the resource.  An example
-            is "crontabber.connection_context.ConnectionContext".
+            is "crontabber.connection_factory.ConnectionFactory".
         resource_name - a string that will serve as an identifier for this
             resource within the mixin. For example, if the resource is
             'database' we'll see configman namespace in the cron job section
@@ -119,8 +119,12 @@ def with_resource_connection_as_argument(resource_name):
 
     def class_decorator(cls):
         def _run_proxy(self, *args, **kwargs):
-            with getattr(self, connection_name)() as connection:
-                self.run(connection, *args, **kwargs)
+            factory = getattr(self, connection_name)
+            with factory() as connection:
+                try:
+                    self.run(connection, *args, **kwargs)
+                finally:
+                    factory.close_connection(connection, force=True)
         cls._run_proxy = _run_proxy
         return cls
     return class_decorator
@@ -187,7 +191,7 @@ def with_subprocess(cls):
 #    class MyClass ...
 with_postgres_transactions = partial(
     with_transactional_resource,
-    'crontabber.connection_context.ConnectionContext',
+    'crontabber.connection_factory.ConnectionFactory',
     'database'
 )
 #------------------------------------------------------------------------------

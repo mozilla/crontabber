@@ -111,7 +111,7 @@ class StateDatabase(RequiredConfig):
     required_config = Namespace()
     required_config.add_option(
         'database_class',
-        default='crontabber.connection_context.ConnectionContext',
+        default='crontabber.connection_factory.ConnectionFactory',
         from_string_converter=class_converter,
         reference_value_from='resource.postgresql'
     )
@@ -648,7 +648,7 @@ class CronTabber(App):
     # for local use, independent of the JSONAndPostgresJobDatabase
     required_config.crontabber.add_option(
         'database_class',
-        default='crontabber.connection_context.ConnectionContext',
+        default='crontabber.connection_factory.ConnectionFactory',
         from_string_converter=class_converter,
         reference_value_from='resource.postgresql'
     )

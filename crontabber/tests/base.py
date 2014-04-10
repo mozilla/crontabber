@@ -163,6 +163,7 @@ class IntegrationTestCaseBase(TestCaseBase):
     def tearDown(self):
         super(IntegrationTestCaseBase, self).tearDown()
         self._truncate()
+        self.conn.close()
 
     def assertAlmostEqual(self, val1, val2):
         if (
