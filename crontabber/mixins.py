@@ -33,8 +33,8 @@ def with_transactional_resource(transactional_resource_class, resource_name):
     """a class decorator for Crontabber Apps.  This decorator will give access
     to a resource connection source.  Configuration will be automatically set
     up and the cron app can expect to have attributes:
-        self.{resource_name}_connection
-        self.{resource_name}_transaction
+        self.{resource_name}_connection_factory
+        self.{resource_name}_transaction_executor
     available to use.
     Within the setup, the RequiredConfig structure gets set up like this:
         config.{resource_name}.{resource_name}_class = \
@@ -78,7 +78,7 @@ def with_transactional_resource(transactional_resource_class, resource_name):
             super(cls, self).__init__(*args, **kwargs)
             setattr(
                 self,
-                "%s_connection" % resource_name,
+                "%s_connection_factory" % resource_name,
                 self.config[resource_name]['%s_class' % resource_name](
                     self.config[resource_name]
                 )
@@ -87,12 +87,12 @@ def with_transactional_resource(transactional_resource_class, resource_name):
             # resource connection
             setattr(
                 self,
-                "%s_transaction" % resource_name,
+                "%s_transaction_executor" % resource_name,
                 self.config[resource_name][
                     '%s_transaction_executor_class' % resource_name
                 ](
                     self.config[resource_name],
-                    getattr(self, "%s_connection" % resource_name)
+                    getattr(self, "%s_connection_factory" % resource_name)
                 )
             )
         if hasattr(cls, '__init__'):
@@ -112,14 +112,14 @@ def with_transactional_resource(transactional_resource_class, resource_name):
 def with_resource_connection_as_argument(resource_name):
     """a class decorator for Crontabber Apps.  This decorator will a class a
     _run_proxy method that passes a databsase connection as a context manager
-    into the CronApp's run method.  The connection will automaticall be close
+    into the CronApp's run method.  The connection will automatically be closed
     when the ConApp's run method ends.
     """
-    connection_name = '%s_connection' % resource_name
+    connection_factory_attr_name = '%s_connection_factory' % resource_name
 
     def class_decorator(cls):
         def _run_proxy(self, *args, **kwargs):
-            factory = getattr(self, connection_name)
+            factory = getattr(self, connection_factory_attr_name)
             with factory() as connection:
                 try:
                     self.run(connection, *args, **kwargs)
@@ -134,14 +134,21 @@ def with_resource_connection_as_argument(resource_name):
 def with_single_transaction(resource_name):
     """a class decorator for Crontabber Apps.  This decorator will give a class
     a _run_proxy method that passes a databsase connection as a context manager
-    into the CronApp's run method.  The connection will automatically be closed
-    when the ConApp's run method ends.
+    into the CronApp's 'run' method.  The run method may then use the
+    connection at will knowing that after if 'run' exits normally, the
+    connection will automatically be commited.  Any abnormal exit from 'run'
+    will result in the connnection being rolledback.
+
     """
-    transaction_name = "%s_transaction" % resource_name
+    transaction_executor_attr_name = "%s_transaction_executor" % resource_name
 
     def class_decorator(cls):
         def _run_proxy(self, *args, **kwargs):
-            getattr(self, transaction_name)(self.run, *args, **kwargs)
+            getattr(self, transaction_executor_attr_name)(
+                self.run,
+                *args,
+                **kwargs
+            )
         cls._run_proxy = _run_proxy
         return cls
     return class_decorator
@@ -183,8 +190,8 @@ def with_subprocess(cls):
 # dedicated postgresql mixins
 #------------------------------------------------------------------------------
 # this class decorator adds attributes to the class in the form:
-#     self.database_connection
-#     self.database_transaction
+#     self.database_connection_factory
+#     self.database_transaction_executor
 # when using this definition as a class decorator, it is necessary to use
 # parenthesis as it is a function call:
 #    @with_postgres_transactions()

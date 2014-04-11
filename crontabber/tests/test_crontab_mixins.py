@@ -65,16 +65,10 @@ class TestCrontabMixins(unittest.TestCase):
         )
         config = cm.get_config()
         a = Alpha(config, mock.Mock())
-        ok_(hasattr(a, 'database_connection'))
-        ok_(isinstance(
-            a.database_connection,
-            ConnectionFactory
-        ))
-        ok_(hasattr(a, 'database_transaction'))
-        ok_(isinstance(
-            a.database_transaction,
-            TransactionExecutor
-        ))
+        ok_(hasattr(a, 'database_connection_factory'))
+        ok_(isinstance(a.database_connection_factory, ConnectionFactory))
+        ok_(hasattr(a, 'database_transaction_executor'))
+        ok_(isinstance(a.database_transaction_executor, TransactionExecutor))
 
     def test_with_resource_connection_as_argument(self):
         @ctm.with_transactional_resource(

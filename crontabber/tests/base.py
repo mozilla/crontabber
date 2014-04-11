@@ -43,8 +43,8 @@ class TestCaseBase(unittest.TestCase):
             shutil.rmtree(self.tempdir)
 
     def _setup_config_manager(self, jobs_string, extra_value_source=None):
-        """setup and return a configman.ConfigurationManager and a the crontabber
-        json file.
+        """setup and return a configman.ConfigurationManager and a the
+        crontabber json file.
             jobs_string - a formatted string list services to be offered
             config - a string representing a config file OR a mapping of
                      key/value pairs to be used to override config defaults or
@@ -116,7 +116,7 @@ class IntegrationTestCaseBase(TestCaseBase):
         config_manager = configman.ConfigurationManager(
             # [self.required_config],
             [app.CronTabber.get_required_config(),
-             app.StateDatabase.get_required_config()],
+             app.JobStateDatabase.get_required_config()],
             values_source_list=[
                 configman.ConfigFileFutureProxy,
                 configman.environment,
@@ -136,7 +136,7 @@ class IntegrationTestCaseBase(TestCaseBase):
         super(IntegrationTestCaseBase, self).setUp()
         self.config = self.get_standard_config()
         # instanciate one of these to make sure the tables are created
-        app.StateDatabase(self.config.crontabber)
+        app.JobStateDatabase(self.config.crontabber)
 
         dsn = (
             'host=%(database_hostname)s '
