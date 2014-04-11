@@ -1052,7 +1052,8 @@ class TestCrontabber(IntegrationTestCaseBase):
             infos = [x for x in infos if x.startswith('Ran ')]
             ok_('Ran PostgresTransactionSampleJob' not in infos)
 
-            information = tab.job_state_database['broken-transaction-managed-pg-job']
+            information = \
+                tab.job_state_database['broken-transaction-managed-pg-job']
             ok_(information['last_error'])
             ok_(
                 'ProgrammingError' in
@@ -1147,10 +1148,9 @@ class TestCrontabber(IntegrationTestCaseBase):
             day_before_yesterday = today - datetime.timedelta(days=2)
             for each in (today, yesterday, day_before_yesterday):
                 formatted = each.strftime('%Y-%m-%d')
-                ok_([
-                    x for x in infos
-                    if formatted in x
-                ])
+                ok_(
+                    [x for x in infos if formatted in x]
+                )
 
     def test_backfilling_failling_midway(self):
         """ this test simulates when you have something like this:
@@ -1192,7 +1192,8 @@ class TestCrontabber(IntegrationTestCaseBase):
                 tab.job_state_database[app_name]['first_run'] + interval
             )
 
-            first_last_success = tab.job_state_database[app_name]['last_success']
+            first_last_success = \
+                tab.job_state_database[app_name]['last_success']
             tab.run_all()
 
             # now, we expect the new last_success to be 1 day more
@@ -1252,10 +1253,9 @@ class TestCrontabber(IntegrationTestCaseBase):
             day_before_yesterday = today - datetime.timedelta(days=2)
             for each in (today, yesterday, day_before_yesterday):
                 formatted = each.strftime('%Y-%m-%d')
-                ok_([
-                    x for x in infos
-                    if formatted in x
-                ])
+                ok_(
+                    [x for x in infos if formatted in x]
+                )
 
     def test_run_with_excess_whitespace(self):
         # this test asserts a found bug where excess newlines
@@ -2006,10 +2006,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             day_before_yesterday = today - datetime.timedelta(days=2)
             for each in (today, yesterday, day_before_yesterday):
                 formatted = each.strftime('%Y-%m-%d')
-                ok_([
-                    x for x in infos
-                    if formatted in x
-                ])
+                ok_([x for x in infos if formatted in x])
 
 
 # =============================================================================

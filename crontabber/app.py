@@ -768,8 +768,10 @@ class CronTabber(App):
     @property
     def job_state_database(self):
         if not getattr(self, '_job_state_db', None):
-            self._job_state_database = self.config.crontabber.job_state_db_class(
-                self.config.crontabber
+            self._job_state_database = (
+                self.config.crontabber.job_state_db_class(
+                    self.config.crontabber
+                )
             )
         return self._job_state_database
 

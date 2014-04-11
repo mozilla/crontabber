@@ -145,7 +145,7 @@ class TransactionExecutorWithInfiniteBackoff(TransactionExecutor):
             self.responsive_sleep(
                 wait_in_seconds,
                 'waiting for retry after failure in %s transaction' %
-                    self.connection_source_type,
+                self.connection_source_type,
             )
         raise
 
