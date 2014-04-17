@@ -15,7 +15,7 @@ import psycopg2
 from nose.plugins.attrib import attr
 from nose.tools import eq_, ok_, assert_raises
 
-from crontabber import app, base
+from crontabber import app, base, __version__
 from crontabber.datetimeutil import utc_now
 from configman import Namespace
 from crontabber.mixins import (
@@ -1638,6 +1638,18 @@ class TestCrontabber(IntegrationTestCaseBase):
             ok_('MoreTroubleJob' in output)
             ok_('NameError' in output)
             ok_('Trouble!!' in output)
+
+    def test_print_version(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.BasicJob|1d\n'
+            'crontabber.tests.test_crontabber.FooJob|1d'
+        )
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            #tab.run_all()
+            stream = StringIO()
+            tab.print_version(stream=stream)
+            eq_('%s\n' % __version__, stream.getvalue())
 
     def test_reorder_dag_on_joblist(self):
         config_manager = self._setup_config_manager(
