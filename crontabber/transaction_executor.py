@@ -46,14 +46,15 @@ class TransactionExecutor(RequiredConfig):
                 result = function(connection, *args, **kwargs)
                 connection.commit()
                 return result
+            except DBApiUtilNonFatalBaseException:
+                connection.rollback()
+                raise
             except BaseException, x:
                 connection.rollback()
                 self.config.logger.error(
                     'Exception raised during %s transaction',
                     self.connection_source_type,
                     exc_info=True)
-                if isinstance(x, DBApiUtilNonFatalBaseException):
-                    raise
                 self.db_conn_context_source.force_reconnect()
                 raise
 
@@ -113,6 +114,9 @@ class TransactionExecutorWithInfiniteBackoff(TransactionExecutor):
                         connection.rollback()
                         raise
 
+            except DBApiUtilNonFatalBaseException:
+                raise
+
             except self.db_conn_context_source.conditional_exceptions, x:
                 # these exceptions may or may not be retriable
                 # the test is for is a last ditch effort to see if
@@ -134,9 +138,6 @@ class TransactionExecutorWithInfiniteBackoff(TransactionExecutor):
                     '%s transaction error eligible for retry',
                     self.connection_source_type,
                     exc_info=True)
-
-            if isinstance(x, DBApiUtilNonFatalBaseException):
-                raise
 
             self.db_conn_context_source.force_reconnect()
             self.config.logger.debug(
