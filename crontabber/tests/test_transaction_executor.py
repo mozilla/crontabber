@@ -367,9 +367,18 @@ class TestTransactionExecutor(unittest.TestCase):
                 # so after 2 + 4 + 6 + 10 + 15 seconds
                 # all will be exhausted
                 if sum(_sleep_count) < sum([2, 4, 6, 10, 15]):
+
+
                     class MyProgrammingError(psycopg2.ProgrammingError):
-                        def __init__(self, *args, **kwargs):
-                            self.pgerror = 'SSL SYSCALL error: EOF detected'
+                        @property
+                        def pgerror(self):
+                            try:
+                                return self._mypgerror
+                            except AttributeError:
+                                self._mypgerror = \
+                                    'SSL SYSCALL error: EOF detected'
+                                return self._mypgerror
+
                     exp = MyProgrammingError('this is bad')
                     raise exp
 
