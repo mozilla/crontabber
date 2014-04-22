@@ -41,6 +41,7 @@ except ImportError:
 
 from configman import Namespace, RequiredConfig
 from configman.converters import class_converter, CannotConvertError
+from crontabber import __version__
 
 
 CREATE_CRONTABBER_SQL = """
@@ -139,6 +140,8 @@ class JobStateDatabase(RequiredConfig):
             execute_no_results,
             CREATE_CRONTABBER_LOG_SQL
         )
+
+
 
     def has_data(self):
         try:
@@ -615,7 +618,7 @@ def pipe_splitter(text):
 class CronTabber(App):
 
     app_name = 'crontabber'
-    app_version = '1.1'
+    app_version = __version__
     app_description = __doc__
 
     required_config = Namespace()
@@ -714,6 +717,15 @@ class CronTabber(App):
         exclude_from_dump_conf=True,
     )
 
+    required_config.add_option(
+        name='version',
+        default=False,
+        doc='Print current version and exit',
+        short_form='v',
+        exclude_from_print_conf=True,
+        exclude_from_dump_conf=True,
+    )
+
     required_config.namespace('sentry')
     required_config.sentry.add_option(
         'dsn',
@@ -739,6 +751,9 @@ class CronTabber(App):
             return 0
         elif self.config.get('nagios'):
             return self.nagios()
+        elif self.config.get('version'):
+            self.print_version()
+            return 0
         elif self.config.get('reset-job'):
             self.reset_job(self.config.get('reset-job'))
             return 0
@@ -821,6 +836,9 @@ class CronTabber(App):
         stream.write('OK - All systems nominal')
         stream.write('\n')
         return 0
+
+    def print_version(self, stream=sys.stdout):
+        stream.write('%s\n' % self.app_version)
 
     def list_jobs(self, stream=None):
         if not stream:
