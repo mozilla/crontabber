@@ -19,19 +19,6 @@ import configman
 
 from crontabber import app
 
-DATABASE_HOST = os.environ.get('DATABASE_HOST', 'localhost')
-DATABASE_NAME = os.environ.get('DATABASE_NAME', 'test_crontabber')
-DATABASE_USERNAME = os.environ.get('DATABASE_USERNAME', '')
-DATABASE_PASSWORD = os.environ.get('DATABASE_PASSWORD', '')
-
-
-DSN = {
-    "crontabber.database_hostname": DATABASE_HOST,
-    "crontabber.database_name": DATABASE_NAME,
-    "crontabber.database_username": DATABASE_USERNAME,
-    "crontabber.database_password": DATABASE_PASSWORD
-}
-
 
 class TestCaseBase(unittest.TestCase):
 

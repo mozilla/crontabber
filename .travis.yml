@@ -12,13 +12,12 @@ addons:
 before_install:
     - pip install -r test-requirements.txt
     - psql -c 'create database travis_ci_test;' -U postgres
-    - cp test-crontabber.ini.travis test-crontabber.ini
 
 install:
     - python setup.py install
 
 script:
-    - nosetests crontabber
+    - database_username=postgres database_name=travis_ci_test nosetests crontabber
 
 notifications:
     irc:
