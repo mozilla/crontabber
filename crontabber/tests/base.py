@@ -22,6 +22,9 @@ from crontabber import app
 
 class TestCaseBase(unittest.TestCase):
 
+    def shortDescription(self):
+        return None
+
     def setUp(self):
         self.tempdir = tempfile.mkdtemp()
 
