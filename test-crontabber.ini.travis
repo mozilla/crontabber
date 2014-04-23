@@ -1,4 +1,0 @@
-[crontabber]
-database_username=postgres
-database_password=
-database_name=travis_ci_test

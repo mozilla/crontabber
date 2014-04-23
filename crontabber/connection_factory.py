@@ -29,7 +29,7 @@ class ConnectionFactory(RequiredConfig):
     )
     required_config.add_option(
         name='database_name',
-        default='breakpad',
+        default='',
         doc='the name of the database',
         reference_value_from='resource.postgresql',
     )
@@ -41,13 +41,13 @@ class ConnectionFactory(RequiredConfig):
     )
     required_config.add_option(
         name='database_username',
-        default='breakpad_rw',
+        default='',
         doc='the name of the user within the database',
         reference_value_from='secrets.postgresql',
     )
     required_config.add_option(
         name='database_password',
-        default='aPassword',
+        default='',
         doc="the user's database password",
         reference_value_from='secrets.postgresql',
     )
