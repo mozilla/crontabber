@@ -108,284 +108,6 @@ class BrokenJSONError(ValueError):
 _marker = object()
 
 
-class JobStateDatabase(RequiredConfig):
-    required_config = Namespace()
-    required_config.add_option(
-        'database_class',
-        default='crontabber.connection_factory.ConnectionFactory',
-        from_string_converter=class_converter,
-        reference_value_from='resource.postgresql'
-    )
-    required_config.add_option(
-        'transaction_executor_class',
-        default='crontabber.transaction_executor.TransactionExecutor',
-        doc='a class that will execute transactions',
-        from_string_converter=class_converter,
-        reference_value_from='resource.postgresql'
-    )
-
-    def __init__(self, config=None):
-        self.config = config
-
-        self.database_connection_factory = config.database_class(config)
-        self.transaction_executor = self.config.transaction_executor_class(
-            self.config,
-            self.database_connection_factory
-        )
-        self.transaction_executor(
-            execute_no_results,
-            CREATE_CRONTABBER_SQL
-        )
-        self.transaction_executor(
-            execute_no_results,
-            CREATE_CRONTABBER_LOG_SQL
-        )
-
-
-
-    def has_data(self):
-        try:
-            return bool(self.transaction_executor(
-                single_value_sql,
-                "SELECT COUNT(*) FROM crontabber"
-            ))
-        except SQLDidNotReturnSingleValue:
-            return False
-
-    def __iter__(self):
-        return iter([
-            record[0] for record in
-            self.transaction_executor(
-                execute_query_fetchall,
-                "SELECT app_name FROM crontabber"
-            )
-        ])
-
-    def __contains__(self, key):
-        """return True if we have a job by this key"""
-        try:
-            self.transaction_executor(
-                single_value_sql,
-                """SELECT app_name
-                   FROM crontabber
-                   WHERE
-                        app_name = %s""",
-                (key,)
-            )
-            return True
-        except SQLDidNotReturnSingleValue:
-            return False
-
-    def keys(self):
-        """return a list of all app_names"""
-        keys = []
-        for app_name, __ in self.items():
-            keys.append(app_name)
-        return keys
-
-    def items(self):
-        """return all the app_names and their values as tuples"""
-        sql = """
-            SELECT
-                app_name,
-                next_run,
-                first_run,
-                last_run,
-                last_success,
-                depends_on,
-                error_count,
-                last_error
-            FROM crontabber"""
-        columns = (
-            'app_name',
-            'next_run', 'first_run', 'last_run', 'last_success',
-            'depends_on', 'error_count', 'last_error'
-        )
-        items = []
-        for record in self.transaction_executor(execute_query_fetchall, sql):
-            row = dict(zip(columns, record))
-            if isinstance(row['last_error'], basestring):
-                row['last_error'] = json.loads(row['last_error'])
-            items.append((row.pop('app_name'), row))
-        return items
-
-    def values(self):
-        """return a list of all state values"""
-        values = []
-        for __, data in self.items():
-            values.append(data)
-        return values
-
-    def __getitem__(self, key):
-        """return the job info or raise a KeyError"""
-        sql = """
-            SELECT
-                next_run,
-                first_run,
-                last_run,
-                last_success,
-                depends_on,
-                error_count,
-                last_error
-            FROM crontabber
-            WHERE
-                app_name = %s"""
-        columns = (
-            'next_run', 'first_run', 'last_run', 'last_success',
-            'depends_on', 'error_count', 'last_error'
-        )
-        try:
-            record = self.transaction_executor(single_row_sql, sql, (key,))
-        except SQLDidNotReturnSingleRow:
-            raise KeyError(key)
-        row = dict(zip(columns, record))
-        if isinstance(row['last_error'], basestring):
-            row['last_error'] = json.loads(row['last_error'])
-        return row
-
-    @database_transaction()
-    def __setitem__(self, connection, key, value):
-        class LastErrorEncoder(json.JSONEncoder):
-            def default(self, obj):
-                if isinstance(obj, type):
-                    return repr(obj)
-                return json.JSONEncoder.default(self, obj)
-
-        try:
-            single_value_sql(
-                connection,
-                """SELECT app_name
-                FROM crontabber
-                WHERE
-                    app_name = %s""",
-                (key,)
-            )
-            # the key exists, do an update
-            next_sql = """UPDATE crontabber
-                SET
-                    next_run = %(next_run)s,
-                    first_run = %(first_run)s,
-                    last_run = %(last_run)s,
-                    last_success = %(last_success)s,
-                    depends_on = %(depends_on)s,
-                    error_count = %(error_count)s,
-                    last_error = %(last_error)s
-                WHERE
-                    app_name = %(app_name)s"""
-        except SQLDidNotReturnSingleValue:
-            # the key does not exist, do an insert
-            next_sql = """
-                    INSERT INTO crontabber (
-                        app_name,
-                        next_run,
-                        first_run,
-                        last_run,
-                        last_success,
-                        depends_on,
-                        error_count,
-                        last_error
-                    ) VALUES (
-                        %(app_name)s,
-                        %(next_run)s,
-                        %(first_run)s,
-                        %(last_run)s,
-                        %(last_success)s,
-                        %(depends_on)s,
-                        %(error_count)s,
-                        %(last_error)s
-                    )"""
-        parameters = {
-            'app_name': key,
-            'next_run': value['next_run'],
-            'first_run': value['first_run'],
-            'last_run': value['last_run'],
-            'last_success': value.get('last_success'),
-            'depends_on': value['depends_on'],
-            'error_count': value['error_count'],
-            'last_error': json.dumps(value['last_error'], cls=LastErrorEncoder)
-        }
-        execute_no_results(
-            connection,
-            next_sql,
-            parameters
-        )
-
-    @database_transaction()
-    def copy(self, connection):
-        sql = """SELECT
-                app_name,
-                next_run,
-                first_run,
-                last_run,
-                last_success,
-                depends_on,
-                error_count,
-                last_error
-            FROM crontabber
-        """
-        columns = (
-            'app_name',
-            'next_run', 'first_run', 'last_run', 'last_success',
-            'depends_on', 'error_count', 'last_error'
-        )
-        all = {}
-        for record in execute_query_iter(connection, sql):
-            row = dict(zip(columns, record))
-            if isinstance(row['last_error'], basestring):
-                row['last_error'] = json.loads(row['last_error'])
-            all[row.pop('app_name')] = row
-        return all
-
-    def update(self, data):
-        for key in data:
-            self[key] = data[key]
-
-    def get(self, key, default=None):
-        """return the item by key or return 'default'"""
-        try:
-            return self[key]
-        except KeyError:
-            return default
-
-    def pop(self, key, default=_marker):
-        """remove the item by key
-        If not default is specified, raise KeyError if nothing
-        could be removed.
-        Return 'default' if specified and nothing could be removed
-        """
-        try:
-            popped = self[key]
-            del self[key]
-            return popped
-        except KeyError:
-            if default == _marker:
-                raise
-            return default
-
-    @database_transaction()
-    def __delitem__(self, connection, key):
-        """remove the item by key or raise KeyError"""
-        try:
-            # result intentionally ignored
-            single_value_sql(
-                connection,
-                """SELECT app_name
-                   FROM crontabber
-                   WHERE
-                        app_name = %s""",
-                (key,)
-            )
-        except SQLDidNotReturnSingleValue:
-            raise KeyError(key)
-        # item exists
-        execute_no_results(
-            connection,
-            """DELETE FROM crontabber
-               WHERE app_name = %s""",
-            (key,)
-        )
-
-
 def timesince(d, now):  # pragma: no cover
     """
     Taken from django.utils.timesince
@@ -615,577 +337,913 @@ def pipe_splitter(text):
     return text.split('|', 1)[0]
 
 
-class CronTabber(App):
+def get_crontabber_class(
+    default_jobs='',
+    default_database_class='crontabber.connection_factory.ConnectionFactory'
+):
+    """This method will define a custom Crontabber class with the specified
+    defaults for the jobs and database_class.
 
-    app_name = 'crontabber'
-    app_version = __version__
-    app_description = __doc__
+    When a user of this module wants an instance of the CronTabber class setup
+    for their needs, they just do this:
 
-    required_config = Namespace()
-    # the most important option, 'jobs', is defined last
-    required_config.namespace('crontabber')
+        >>> from crontabber.app import get_crontabber_class
+        >>> my_jobs = [ ... ]
+        >>> my_database_class = ...
+        >>> CronTabber = get_crontabber_class(my_jobs, my_database_class)
+        >>> ct = CronTabber(my_config)
 
-    required_config.crontabber.add_option(
-        name='job_state_db_class',
-        default=JobStateDatabase,
-        doc='Class to load and save the state and runs',
-    )
-
-    required_config.crontabber.add_option(
-        'jobs',
-        default='',
-        from_string_converter=classes_in_namespaces_converter_with_compression(
-            reference_namespace=Namespace(),
-            list_splitter_fn=line_splitter,
-            class_extractor=pipe_splitter,
-            extra_extractor=get_extra_as_options
+    """
+    class JobStateDatabaseClass(RequiredConfig):
+        required_config = Namespace()
+        required_config.add_option(
+            'database_class',
+            default=default_database_class,
+            from_string_converter=class_converter,
+            reference_value_from='resource.postgresql'
         )
-    )
+        required_config.add_option(
+            'transaction_executor_class',
+            default='crontabber.transaction_executor.TransactionExecutor',
+            doc='a class that will execute transactions',
+            from_string_converter=class_converter,
+            reference_value_from='resource.postgresql'
+        )
 
-    required_config.crontabber.add_option(
-        'error_retry_time',
-        default=300,
-        doc='number of seconds to re-attempt a job that failed'
-    )
+        def __init__(self, config=None):
+            self.config = config
 
-    # for local use, independent of the JSONAndPostgresJobDatabase
-    required_config.crontabber.add_option(
-        'database_class',
-        default='crontabber.connection_factory.ConnectionFactory',
-        from_string_converter=class_converter,
-        reference_value_from='resource.postgresql'
-    )
-    required_config.crontabber.add_option(
-        'transaction_executor_class',
-        default='crontabber.transaction_executor.TransactionExecutor',
-        doc='a class that will execute transactions',
-        from_string_converter=class_converter,
-        reference_value_from='resource.postgresql'
-    )
-
-    required_config.add_option(
-        name='job',
-        default='',
-        doc='Run a specific job',
-        short_form='j',
-        exclude_from_print_conf=True,
-        exclude_from_dump_conf=True,
-    )
-
-    required_config.add_option(
-        name='list-jobs',
-        default=False,
-        doc='List all jobs',
-        short_form='l',
-        exclude_from_print_conf=True,
-        exclude_from_dump_conf=True,
-    )
-
-    required_config.add_option(
-        name='force',
-        default=False,
-        doc='Force running a job despite dependencies',
-        short_form='f',
-        exclude_from_print_conf=True,
-        exclude_from_dump_conf=True,
-    )
-
-    required_config.add_option(
-        name='configtest',
-        default=False,
-        doc='Check that all configured jobs are OK',
-        exclude_from_print_conf=True,
-        exclude_from_dump_conf=True,
-    )
-
-    required_config.add_option(
-        name='reset-job',
-        default='',
-        doc='Pretend a job has never been run',
-        short_form='r',
-        exclude_from_print_conf=True,
-        exclude_from_dump_conf=True,
-    )
-
-    required_config.add_option(
-        name='nagios',
-        default=False,
-        doc='Exits with 0, 1 or 2 with a message on stdout if errors have '
-            'happened.',
-        short_form='n',
-        exclude_from_print_conf=True,
-        exclude_from_dump_conf=True,
-    )
-
-    required_config.add_option(
-        name='version',
-        default=False,
-        doc='Print current version and exit',
-        short_form='v',
-        exclude_from_print_conf=True,
-        exclude_from_dump_conf=True,
-    )
-
-    required_config.namespace('sentry')
-    required_config.sentry.add_option(
-        'dsn',
-        doc='DSN for Sentry via raven',
-        default='',
-        reference_value_from='secrets.sentry',
-    )
-
-    def __init__(self, config):
-        super(CronTabber, self).__init__(config)
-        self.database_connection_factory = \
-            self.config.crontabber.database_class(config.crontabber)
-        self.transaction_executor = (
-            self.config.crontabber.transaction_executor_class(
-                config.crontabber,
+            self.database_connection_factory = config.database_class(config)
+            self.transaction_executor = self.config.transaction_executor_class(
+                self.config,
                 self.database_connection_factory
             )
+            self.transaction_executor(
+                execute_no_results,
+                CREATE_CRONTABBER_SQL
+            )
+            self.transaction_executor(
+                execute_no_results,
+                CREATE_CRONTABBER_LOG_SQL
+            )
+
+        def has_data(self):
+            try:
+                return bool(self.transaction_executor(
+                    single_value_sql,
+                    "SELECT COUNT(*) FROM crontabber"
+                ))
+            except SQLDidNotReturnSingleValue:
+                return False
+
+        def __iter__(self):
+            return iter([
+                record[0] for record in
+                self.transaction_executor(
+                    execute_query_fetchall,
+                    "SELECT app_name FROM crontabber"
+                )
+            ])
+
+        def __contains__(self, key):
+            """return True if we have a job by this key"""
+            try:
+                self.transaction_executor(
+                    single_value_sql,
+                    """SELECT app_name
+                       FROM crontabber
+                       WHERE
+                            app_name = %s""",
+                    (key,)
+                )
+                return True
+            except SQLDidNotReturnSingleValue:
+                return False
+
+        def keys(self):
+            """return a list of all app_names"""
+            keys = []
+            for app_name, __ in self.items():
+                keys.append(app_name)
+            return keys
+
+        def items(self):
+            """return all the app_names and their values as tuples"""
+            sql = """
+                SELECT
+                    app_name,
+                    next_run,
+                    first_run,
+                    last_run,
+                    last_success,
+                    depends_on,
+                    error_count,
+                    last_error
+                FROM crontabber"""
+            columns = (
+                'app_name',
+                'next_run', 'first_run', 'last_run', 'last_success',
+                'depends_on', 'error_count', 'last_error'
+            )
+            items = []
+            for record in self.transaction_executor(
+                execute_query_fetchall,
+                sql
+            ):
+                row = dict(zip(columns, record))
+                if isinstance(row['last_error'], basestring):
+                    row['last_error'] = json.loads(row['last_error'])
+                items.append((row.pop('app_name'), row))
+            return items
+
+        def values(self):
+            """return a list of all state values"""
+            values = []
+            for __, data in self.items():
+                values.append(data)
+            return values
+
+        def __getitem__(self, key):
+            """return the job info or raise a KeyError"""
+            sql = """
+                SELECT
+                    next_run,
+                    first_run,
+                    last_run,
+                    last_success,
+                    depends_on,
+                    error_count,
+                    last_error
+                FROM crontabber
+                WHERE
+                    app_name = %s"""
+            columns = (
+                'next_run', 'first_run', 'last_run', 'last_success',
+                'depends_on', 'error_count', 'last_error'
+            )
+            try:
+                record = self.transaction_executor(single_row_sql, sql, (key,))
+            except SQLDidNotReturnSingleRow:
+                raise KeyError(key)
+            row = dict(zip(columns, record))
+            if isinstance(row['last_error'], basestring):
+                row['last_error'] = json.loads(row['last_error'])
+            return row
+
+        @database_transaction()
+        def __setitem__(self, connection, key, value):
+            class LastErrorEncoder(json.JSONEncoder):
+                def default(self, obj):
+                    if isinstance(obj, type):
+                        return repr(obj)
+                    return json.JSONEncoder.default(self, obj)
+
+            try:
+                single_value_sql(
+                    connection,
+                    """SELECT app_name
+                    FROM crontabber
+                    WHERE
+                        app_name = %s""",
+                    (key,)
+                )
+                # the key exists, do an update
+                next_sql = """UPDATE crontabber
+                    SET
+                        next_run = %(next_run)s,
+                        first_run = %(first_run)s,
+                        last_run = %(last_run)s,
+                        last_success = %(last_success)s,
+                        depends_on = %(depends_on)s,
+                        error_count = %(error_count)s,
+                        last_error = %(last_error)s
+                    WHERE
+                        app_name = %(app_name)s"""
+            except SQLDidNotReturnSingleValue:
+                # the key does not exist, do an insert
+                next_sql = """
+                        INSERT INTO crontabber (
+                            app_name,
+                            next_run,
+                            first_run,
+                            last_run,
+                            last_success,
+                            depends_on,
+                            error_count,
+                            last_error
+                        ) VALUES (
+                            %(app_name)s,
+                            %(next_run)s,
+                            %(first_run)s,
+                            %(last_run)s,
+                            %(last_success)s,
+                            %(depends_on)s,
+                            %(error_count)s,
+                            %(last_error)s
+                        )"""
+            parameters = {
+                'app_name': key,
+                'next_run': value['next_run'],
+                'first_run': value['first_run'],
+                'last_run': value['last_run'],
+                'last_success': value.get('last_success'),
+                'depends_on': value['depends_on'],
+                'error_count': value['error_count'],
+                'last_error': json.dumps(
+                    value['last_error'],
+                    cls=LastErrorEncoder
+                )
+            }
+            execute_no_results(
+                connection,
+                next_sql,
+                parameters
+            )
+
+        @database_transaction()
+        def copy(self, connection):
+            sql = """SELECT
+                    app_name,
+                    next_run,
+                    first_run,
+                    last_run,
+                    last_success,
+                    depends_on,
+                    error_count,
+                    last_error
+                FROM crontabber
+            """
+            columns = (
+                'app_name',
+                'next_run', 'first_run', 'last_run', 'last_success',
+                'depends_on', 'error_count', 'last_error'
+            )
+            all = {}
+            for record in execute_query_iter(connection, sql):
+                row = dict(zip(columns, record))
+                if isinstance(row['last_error'], basestring):
+                    row['last_error'] = json.loads(row['last_error'])
+                all[row.pop('app_name')] = row
+            return all
+
+        def update(self, data):
+            for key in data:
+                self[key] = data[key]
+
+        def get(self, key, default=None):
+            """return the item by key or return 'default'"""
+            try:
+                return self[key]
+            except KeyError:
+                return default
+
+        def pop(self, key, default=_marker):
+            """remove the item by key
+            If not default is specified, raise KeyError if nothing
+            could be removed.
+            Return 'default' if specified and nothing could be removed
+            """
+            try:
+                popped = self[key]
+                del self[key]
+                return popped
+            except KeyError:
+                if default == _marker:
+                    raise
+                return default
+
+        @database_transaction()
+        def __delitem__(self, connection, key):
+            """remove the item by key or raise KeyError"""
+            try:
+                # result intentionally ignored
+                single_value_sql(
+                    connection,
+                    """SELECT app_name
+                       FROM crontabber
+                       WHERE
+                            app_name = %s""",
+                    (key,)
+                )
+            except SQLDidNotReturnSingleValue:
+                raise KeyError(key)
+            # item exists
+            execute_no_results(
+                connection,
+                """DELETE FROM crontabber
+                   WHERE app_name = %s""",
+                (key,)
+            )
+
+    class CronTabberAppClass(App):
+
+        app_name = 'crontabber'
+        app_version = __version__
+        app_description = __doc__
+
+        required_config = Namespace()
+        # the most important option, 'jobs', is defined last
+        required_config.namespace('crontabber')
+
+        required_config.crontabber.add_option(
+            name='job_state_db_class',
+            default=JobStateDatabaseClass,
+            doc='Class to load and save the state and runs',
         )
 
-    def main(self):
-        if self.config.get('list-jobs'):
-            self.list_jobs()
-            return 0
-        elif self.config.get('nagios'):
-            return self.nagios()
-        elif self.config.get('version'):
-            self.print_version()
-            return 0
-        elif self.config.get('reset-job'):
-            self.reset_job(self.config.get('reset-job'))
-            return 0
-        elif self.config.get('configtest'):
-            if not self.configtest():
-                return 1
-            else:
-                return 0
-        if self.config.get('job'):
-            self.run_one(self.config['job'], self.config.get('force'))
-        else:
-            self.run_all()
-        return 0
-
-    @staticmethod
-    def _reorder_class_list(class_list):
-        # class_list looks something like this:
-        # [('FooBarJob', <class 'FooBarJob'>),
-        #  ('BarJob', <class 'BarJob'>),
-        #  ('FooJob', <class 'FooJob'>)]
-        return reorder_dag(
-            class_list,
-            depends_getter=lambda x: getattr(x[1], 'depends_on', None),
-            name_getter=lambda x: x[1].app_name
+        required_config.crontabber.add_option(
+            'jobs',
+            default=default_jobs,
+            from_string_converter=
+            classes_in_namespaces_converter_with_compression(
+                reference_namespace=Namespace(),
+                list_splitter_fn=line_splitter,
+                class_extractor=pipe_splitter,
+                extra_extractor=get_extra_as_options
+            )
         )
 
-    @property
-    def job_state_database(self):
-        if not getattr(self, '_job_state_db', None):
-            self._job_state_database = (
-                self.config.crontabber.job_state_db_class(
-                    self.config.crontabber
+        required_config.crontabber.add_option(
+            'error_retry_time',
+            default=300,
+            doc='number of seconds to re-attempt a job that failed'
+        )
+
+        # for local use, independent of the JSONAndPostgresJobDatabase
+        required_config.crontabber.add_option(
+            'database_class',
+            default=default_database_class,
+            from_string_converter=class_converter,
+            reference_value_from='resource.postgresql'
+        )
+        required_config.crontabber.add_option(
+            'transaction_executor_class',
+            default='crontabber.transaction_executor.TransactionExecutor',
+            doc='a class that will execute transactions',
+            from_string_converter=class_converter,
+            reference_value_from='resource.postgresql'
+        )
+
+        required_config.add_option(
+            name='job',
+            default='',
+            doc='Run a specific job',
+            short_form='j',
+            exclude_from_print_conf=True,
+            exclude_from_dump_conf=True,
+        )
+
+        required_config.add_option(
+            name='list-jobs',
+            default=False,
+            doc='List all jobs',
+            short_form='l',
+            exclude_from_print_conf=True,
+            exclude_from_dump_conf=True,
+        )
+
+        required_config.add_option(
+            name='force',
+            default=False,
+            doc='Force running a job despite dependencies',
+            short_form='f',
+            exclude_from_print_conf=True,
+            exclude_from_dump_conf=True,
+        )
+
+        required_config.add_option(
+            name='configtest',
+            default=False,
+            doc='Check that all configured jobs are OK',
+            exclude_from_print_conf=True,
+            exclude_from_dump_conf=True,
+        )
+
+        required_config.add_option(
+            name='reset-job',
+            default='',
+            doc='Pretend a job has never been run',
+            short_form='r',
+            exclude_from_print_conf=True,
+            exclude_from_dump_conf=True,
+        )
+
+        required_config.add_option(
+            name='nagios',
+            default=False,
+            doc='Exits with 0, 1 or 2 with a message on stdout if errors have '
+                'happened.',
+            short_form='n',
+            exclude_from_print_conf=True,
+            exclude_from_dump_conf=True,
+        )
+
+        required_config.add_option(
+            name='version',
+            default=False,
+            doc='Print current version and exit',
+            short_form='v',
+            exclude_from_print_conf=True,
+            exclude_from_dump_conf=True,
+        )
+
+        required_config.namespace('sentry')
+        required_config.sentry.add_option(
+            'dsn',
+            doc='DSN for Sentry via raven',
+            default='',
+            reference_value_from='secrets.sentry',
+        )
+
+        def __init__(self, config):
+            super(CronTabberAppClass, self).__init__(config)
+            self.database_connection_factory = \
+                self.config.crontabber.database_class(config.crontabber)
+            self.transaction_executor = (
+                self.config.crontabber.transaction_executor_class(
+                    config.crontabber,
+                    self.database_connection_factory
                 )
             )
-        return self._job_state_database
 
-    def nagios(self, stream=sys.stdout):
-        """
-        return 0 (OK) if there are no errors in the state.
-        return 1 (WARNING) if a backfill app only has 1 error.
-        return 2 (CRITICAL) if a backfill app has > 1 error.
-        return 2 (CRITICAL) if a non-backfill app has 1 error.
-        """
-        warnings = []
-        criticals = []
-        for class_name, job_class in self.config.crontabber.jobs.class_list:
-            if job_class.app_name in self.job_state_database:
-                info = self.job_state_database.get(job_class.app_name)
-                if not info.get('error_count', 0):
-                    continue
-                error_count = info['error_count']
-                # trouble!
-                serialized = (
-                    '%s (%s) | %s | %s' %
-                    (job_class.app_name,
-                     class_name,
-                     info['last_error']['type'],
-                     info['last_error']['value'])
-                )
-                if (
-                    error_count == 1 and
-                    hasattr(job_class, "_is_backfill_app")
-                ):
-                    # just a warning for now
-                    warnings.append(serialized)
+        def main(self):
+            if self.config.get('list-jobs'):
+                self.list_jobs()
+                return 0
+            elif self.config.get('nagios'):
+                return self.nagios()
+            elif self.config.get('version'):
+                self.print_version()
+                return 0
+            elif self.config.get('reset-job'):
+                self.reset_job(self.config.get('reset-job'))
+                return 0
+            elif self.config.get('configtest'):
+                if not self.configtest():
+                    return 1
                 else:
-                    # anything worse than that is critical
-                    criticals.append(serialized)
-
-        if criticals:
-            stream.write('CRITICAL - ')
-            stream.write('; '.join(criticals))
-            stream.write('\n')
-            return 2
-        elif warnings:
-            stream.write('WARNING - ')
-            stream.write('; '.join(warnings))
-            stream.write('\n')
-            return 1
-        stream.write('OK - All systems nominal')
-        stream.write('\n')
-        return 0
-
-    def print_version(self, stream=sys.stdout):
-        stream.write('%s\n' % self.app_version)
-
-    def list_jobs(self, stream=None):
-        if not stream:
-            stream = sys.stdout
-        _fmt = '%Y-%m-%d %H:%M:%S'
-        _now = utc_now()
-        PAD = 15
-        for class_name, job_class in self.config.crontabber.jobs.class_list:
-            class_config = self.config.crontabber['class-%s' % class_name]
-            freq = class_config.frequency
-            if class_config.time:
-                freq += ' @ %s' % class_config.time
-            class_name = job_class.__module__ + '.' + job_class.__name__
-            print >>stream, '=== JOB ' + '=' * 72
-            print >>stream, 'Class:'.ljust(PAD), class_name
-            print >>stream, 'App name:'.ljust(PAD), job_class.app_name
-            print >>stream, 'Frequency:'.ljust(PAD), freq
-            try:
-                info = self.job_state_database[job_class.app_name]
-            except KeyError:
-                print >>stream, '*NO PREVIOUS RUN INFO*'
-                continue
-
-            print >>stream, 'Last run:'.ljust(PAD),
-            print >>stream, info['last_run'].strftime(_fmt).ljust(20),
-            print >>stream, '(%s ago)' % timesince(info['last_run'], _now)
-            print >>stream, 'Last success:'.ljust(PAD),
-            if info.get('last_success'):
-                print >>stream, info['last_success'].strftime(_fmt).ljust(20),
-                print >>stream, ('(%s ago)' %
-                                 timesince(info['last_success'], _now))
+                    return 0
+            if self.config.get('job'):
+                self.run_one(self.config['job'], self.config.get('force'))
             else:
-                print >>stream, 'no previous successful run'
-            print >>stream, 'Next run:'.ljust(PAD),
-            print >>stream, info['next_run'].strftime(_fmt).ljust(20),
-            if _now > info['next_run']:
-                print >>stream, ('(was %s ago)' %
-                                 timesince(info['next_run'], _now))
-            else:
-                print >>stream, '(in %s)' % timesince(_now, info['next_run'])
-            if info.get('last_error'):
-                print >>stream, 'Error!!'.ljust(PAD),
-                print >>stream, '(%s times)' % info['error_count']
-                print >>stream, 'Traceback (most recent call last):'
-                print >>stream, info['last_error']['traceback'],
-                print >>stream, '%s:' % info['last_error']['type'],
-                print >>stream, info['last_error']['value']
-            print >>stream, ''
+                self.run_all()
+            return 0
 
-    def reset_job(self, description):
-        """remove the job from the state.
-        if means that next time we run, this job will start over from scratch.
-        """
-        class_list = self.config.crontabber.jobs.class_list
-        class_list = self._reorder_class_list(class_list)
-        for class_name, job_class in class_list:
-            if (
-                job_class.app_name == description or
-                description == job_class.__module__ + '.' + job_class.__name__
+        @staticmethod
+        def _reorder_class_list(class_list):
+            # class_list looks something like this:
+            # [('FooBarJob', <class 'FooBarJob'>),
+            #  ('BarJob', <class 'BarJob'>),
+            #  ('FooJob', <class 'FooJob'>)]
+            return reorder_dag(
+                class_list,
+                depends_getter=lambda x: getattr(x[1], 'depends_on', None),
+                name_getter=lambda x: x[1].app_name
+            )
+
+        @property
+        def job_state_database(self):
+            if not getattr(self, '_job_state_db', None):
+                self._job_state_database = (
+                    self.config.crontabber.job_state_db_class(
+                        self.config.crontabber
+                    )
+                )
+            return self._job_state_database
+
+        def nagios(self, stream=sys.stdout):
+            """
+            return 0 (OK) if there are no errors in the state.
+            return 1 (WARNING) if a backfill app only has 1 error.
+            return 2 (CRITICAL) if a backfill app has > 1 error.
+            return 2 (CRITICAL) if a non-backfill app has 1 error.
+            """
+            warnings = []
+            criticals = []
+            for class_name, job_class in (
+                self.config.crontabber.jobs.class_list
             ):
                 if job_class.app_name in self.job_state_database:
-                    self.config.logger.info('App reset')
-                    self.job_state_database.pop(job_class.app_name)
-                else:
-                    self.config.logger.warning('App already reset')
-                return
-        raise JobNotFoundError(description)
+                    info = self.job_state_database.get(job_class.app_name)
+                    if not info.get('error_count', 0):
+                        continue
+                    error_count = info['error_count']
+                    # trouble!
+                    serialized = (
+                        '%s (%s) | %s | %s' %
+                        (job_class.app_name,
+                         class_name,
+                         info['last_error']['type'],
+                         info['last_error']['value'])
+                    )
+                    if (
+                        error_count == 1 and
+                        hasattr(job_class, "_is_backfill_app")
+                    ):
+                        # just a warning for now
+                        warnings.append(serialized)
+                    else:
+                        # anything worse than that is critical
+                        criticals.append(serialized)
 
-    def run_all(self):
-        class_list = self.config.crontabber.jobs.class_list
-        class_list = self._reorder_class_list(class_list)
-        for class_name, job_class in class_list:
-            class_config = self.config.crontabber['class-%s' % class_name]
-            self._run_one(job_class, class_config)
+            if criticals:
+                stream.write('CRITICAL - ')
+                stream.write('; '.join(criticals))
+                stream.write('\n')
+                return 2
+            elif warnings:
+                stream.write('WARNING - ')
+                stream.write('; '.join(warnings))
+                stream.write('\n')
+                return 1
+            stream.write('OK - All systems nominal')
+            stream.write('\n')
+            return 0
 
-    def run_one(self, description, force=False):
-        # the description in this case is either the app_name or the full
-        # module/class reference
-        class_list = self.config.crontabber.jobs.class_list
-        class_list = self._reorder_class_list(class_list)
-        for class_name, job_class in class_list:
-            if (
-                job_class.app_name == description or
-                description == job_class.__module__ + '.' + job_class.__name__
+        def print_version(self, stream=sys.stdout):
+            stream.write('%s\n' % self.app_version)
+
+        def list_jobs(self, stream=None):
+            if not stream:
+                stream = sys.stdout
+            _fmt = '%Y-%m-%d %H:%M:%S'
+            _now = utc_now()
+            PAD = 15
+            for class_name, job_class in (
+                self.config.crontabber.jobs.class_list
             ):
                 class_config = self.config.crontabber['class-%s' % class_name]
-                self._run_one(job_class, class_config, force=force)
-                return
-        raise JobNotFoundError(description)
-
-    def _run_one(self, job_class, config, force=False):
-        _debug = self.config.logger.debug
-        seconds = convert_frequency(config.frequency)
-        time_ = config.time
-        if not force:
-            if not self.time_to_run(job_class, time_):
-                _debug("skipping %r because it's not time to run", job_class)
-                return
-            ok, dependency_error = self.check_dependencies(job_class)
-            if not ok:
-                _debug(
-                    "skipping %r dependencies aren't met [%s]",
-                    job_class, dependency_error
-                )
-                return
-
-        _debug('about to run %r', job_class)
-        app_name = job_class.app_name
-        info = self.job_state_database.get(app_name)
-
-        last_success = None
-        now = utc_now()
-        try:
-            t0 = time.time()
-            for last_success in self._run_job(job_class, config, info):
-                t1 = time.time()
-                _debug('successfully ran %r on %s', job_class, last_success)
-                self._remember_success(job_class, last_success, t1 - t0)
-                # _run_job() returns a generator, so we don't know how
-                # many times this will loop. Anyway, we need to reset the
-                # 't0' for the next loop if there is one.
-                t0 = time.time()
-            exc_type = exc_value = exc_tb = None
-        except:
-            t1 = time.time()
-            exc_type, exc_value, exc_tb = sys.exc_info()
-
-            # when debugging tests that mock logging, uncomment this otherwise
-            # the exc_info=True doesn't compute and record what the exception
-            # was
-            #raise
-
-            if self.config.sentry and self.config.sentry.dsn:
-                assert raven, "raven not installed"
+                freq = class_config.frequency
+                if class_config.time:
+                    freq += ' @ %s' % class_config.time
+                class_name = job_class.__module__ + '.' + job_class.__name__
+                print >>stream, '=== JOB ' + '=' * 72
+                print >>stream, 'Class:'.ljust(PAD), class_name
+                print >>stream, 'App name:'.ljust(PAD), job_class.app_name
+                print >>stream, 'Frequency:'.ljust(PAD), freq
                 try:
-                    client = raven.Client(dsn=self.config.sentry.dsn)
-                    identifier = client.get_ident(client.captureException())
-                    self.config.logger.info(
-                        'Error captured in Sentry. Reference: %s' % identifier
+                    info = self.job_state_database[job_class.app_name]
+                except KeyError:
+                    print >>stream, '*NO PREVIOUS RUN INFO*'
+                    continue
+
+                print >>stream, 'Last run:'.ljust(PAD),
+                print >>stream, info['last_run'].strftime(_fmt).ljust(20),
+                print >>stream, '(%s ago)' % timesince(info['last_run'], _now)
+                print >>stream, 'Last success:'.ljust(PAD),
+                if info.get('last_success'):
+                    print >>stream, \
+                        info['last_success'].strftime(_fmt).ljust(20),
+                    print >>stream, ('(%s ago)' %
+                                     timesince(info['last_success'], _now))
+                else:
+                    print >>stream, 'no previous successful run'
+                print >>stream, 'Next run:'.ljust(PAD),
+                print >>stream, info['next_run'].strftime(_fmt).ljust(20),
+                if _now > info['next_run']:
+                    print >>stream, ('(was %s ago)' %
+                                     timesince(info['next_run'], _now))
+                else:
+                    print >>stream, '(in %s)' % timesince(
+                        _now, info['next_run']
                     )
-                except Exception:
-                    # Blank exceptions like this is evil but a failure to send
-                    # the exception to Sentry is much less important than for
-                    # crontabber to carry on. This is especially true
-                    # considering that raven depends on network I/O.
-                    _debug('Failed to capture and send error to Sentry',
-                           exc_info=True)
+                if info.get('last_error'):
+                    print >>stream, 'Error!!'.ljust(PAD),
+                    print >>stream, '(%s times)' % info['error_count']
+                    print >>stream, 'Traceback (most recent call last):'
+                    print >>stream, info['last_error']['traceback'],
+                    print >>stream, '%s:' % info['last_error']['type'],
+                    print >>stream, info['last_error']['value']
+                print >>stream, ''
 
-            _debug('error when running %r on %s',
-                   job_class, last_success, exc_info=True)
-            self._remember_failure(
-                job_class,
-                t1 - t0,
-                exc_type,
-                exc_value,
-                exc_tb
-            )
+        def reset_job(self, description):
+            """remove the job from the state.
+            if means that next time we run, this job will start over from
+            scratch.
+            """
+            class_list = self.config.crontabber.jobs.class_list
+            class_list = self._reorder_class_list(class_list)
+            for class_name, job_class in class_list:
+                if (
+                    job_class.app_name == description or
+                    description == job_class.__module__ + '.'
+                        + job_class.__name__
+                ):
+                    if job_class.app_name in self.job_state_database:
+                        self.config.logger.info('App reset')
+                        self.job_state_database.pop(job_class.app_name)
+                    else:
+                        self.config.logger.warning('App already reset')
+                    return
+            raise JobNotFoundError(description)
 
-        finally:
-            self._log_run(job_class, seconds, time_, last_success, now,
-                          exc_type, exc_value, exc_tb)
+        def run_all(self):
+            class_list = self.config.crontabber.jobs.class_list
+            class_list = self._reorder_class_list(class_list)
+            for class_name, job_class in class_list:
+                class_config = self.config.crontabber['class-%s' % class_name]
+                self._run_one(job_class, class_config)
 
-    @database_transaction()
-    def _remember_success(self, connection, class_, success_date, duration):
-        app_name = class_.app_name
-        execute_no_results(
-            connection,
-            """INSERT INTO crontabber_log (
-                app_name,
-                success,
-                duration
-            ) VALUES (
-                %s,
-                %s,
-                %s
-            )""",
-            (app_name, success_date, '%.5f' % duration)
-        )
+        def run_one(self, description, force=False):
+            # the description in this case is either the app_name or the full
+            # module/class reference
+            class_list = self.config.crontabber.jobs.class_list
+            class_list = self._reorder_class_list(class_list)
+            for class_name, job_class in class_list:
+                if (
+                    job_class.app_name == description or
+                    description ==
+                        job_class.__module__ + '.' + job_class.__name__
+                ):
+                    class_config = self.config.crontabber[
+                        'class-%s' % class_name
+                    ]
+                    self._run_one(job_class, class_config, force=force)
+                    return
+            raise JobNotFoundError(description)
 
-    @database_transaction()
-    def _remember_failure(
-        self,
-        connection,
-        class_,
-        duration,
-        exc_type,
-        exc_value,
-        exc_tb
-    ):
-        exc_traceback = ''.join(traceback.format_tb(exc_tb))
-        app_name = class_.app_name
-        execute_no_results(
-            connection,
-            """INSERT INTO crontabber_log (
-                app_name,
-                duration,
-                exc_type,
-                exc_value,
-                exc_traceback
-            ) VALUES (
-                %s,
-                %s,
-                %s,
-                %s,
-                %s
-            )""",
-            (
-                app_name,
-                '%.5f' % duration,
-                repr(exc_type),
-                repr(exc_value),
-                exc_traceback
-            )
-        )
-
-    def check_dependencies(self, class_):
-        try:
-            depends_on = class_.depends_on
-        except AttributeError:
-            # that's perfectly fine
-            return True, None
-        if isinstance(depends_on, basestring):
-            depends_on = [depends_on]
-        for dependency in depends_on:
-            try:
-                job_info = self.job_state_database[dependency]
-            except KeyError:
-                # the job this one depends on hasn't been run yet!
-                return False, "%r hasn't been run yet" % dependency
-            if job_info.get('last_error'):
-                # errored last time it ran
-                return False, "%r errored last time it ran" % dependency
-            if job_info['next_run'] < utc_now():
-                # the dependency hasn't recently run
-                return False, "%r hasn't recently run" % dependency
-        # no reason not to stop this class
-        return True, None
-
-    def time_to_run(self, class_, time_):
-        """return true if it's time to run the job.
-        This is true if there is no previous information about its last run
-        or if the last time it ran and set its next_run to a date that is now
-        past.
-        """
-        app_name = class_.app_name
-        try:
-            info = self.job_state_database[app_name]
-        except KeyError:
-            if time_:
-                h, m = [int(x) for x in time_.split(':')]
-                # only run if this hour and minute is < now
-                now = utc_now()
-                if now.hour > h:
-                    return True
-                elif now.hour == h and now.minute >= m:
-                    return True
-                return False
-            else:
-                # no past information, run now
-                return True
-        next_run = info['next_run']
-        if next_run < utc_now():
-            return True
-        return False
-
-    def _run_job(self, class_, config, info):
-        # here we go!
-        instance = class_(config, info)
-        return instance.main()
-
-    def _log_run(self, class_, seconds, time_, last_success, now,
-                 exc_type, exc_value, exc_tb):
-        assert inspect.isclass(class_)
-        app_name = class_.app_name
-        info = self.job_state_database.get(app_name, {})
-        depends_on = getattr(class_, 'depends_on', [])
-        if isinstance(depends_on, basestring):
-            depends_on = [depends_on]
-        elif not isinstance(depends_on, list):
-            depends_on = list(depends_on)
-        info['depends_on'] = depends_on
-        if 'first_run' not in info:
-            info['first_run'] = now
-        info['last_run'] = now
-        if last_success:
-            info['last_success'] = last_success
-        if exc_type:
-            # it errored, try very soon again
-            info['next_run'] = now + datetime.timedelta(
-                seconds=self.config.crontabber.error_retry_time
-            )
-        else:
-            info['next_run'] = now + datetime.timedelta(seconds=seconds)
-            if time_:
-                h, m = [int(x) for x in time_.split(':')]
-                info['next_run'] = info['next_run'].replace(hour=h,
-                                                            minute=m,
-                                                            second=0,
-                                                            microsecond=0)
-
-        if exc_type:
-            tb = ''.join(traceback.format_tb(exc_tb))
-            info['last_error'] = {
-                'type': exc_type,
-                'value': str(exc_value),
-                'traceback': tb,
-            }
-            info['error_count'] = info.get('error_count', 0) + 1
-        else:
-            info['last_error'] = {}
-            info['error_count'] = 0
-
-        self.job_state_database[app_name] = info
-
-    def configtest(self):
-        """return true if all configured jobs are configured OK"""
-        # similar to run_all() but don't actually run them
-        failed = 0
-
-        class_list = self.config.crontabber.jobs.class_list
-        class_list = self._reorder_class_list(class_list)
-        for class_name, __ in class_list:
-            class_config = self.config.crontabber['class-%s' % class_name]
-            if not self._configtest_one(class_config):
-                failed += 1
-        return not failed
-
-    def _configtest_one(self, config):
-        try:
+        def _run_one(self, job_class, config, force=False):
+            _debug = self.config.logger.debug
             seconds = convert_frequency(config.frequency)
             time_ = config.time
-            if time_:
-                check_time(time_)
-                # if less than 1 day, it doesn't make sense to specify hour
-                if seconds < 60 * 60 * 24:
-                    raise FrequencyDefinitionError(config.time)
-            return True
+            if not force:
+                if not self.time_to_run(job_class, time_):
+                    _debug(
+                        "skipping %r because it's not time to run",
+                        job_class
+                    )
+                    return
+                ok, dependency_error = self.check_dependencies(job_class)
+                if not ok:
+                    _debug(
+                        "skipping %r dependencies aren't met [%s]",
+                        job_class, dependency_error
+                    )
+                    return
 
-        except (JobNotFoundError,
-                JobDescriptionError,
-                FrequencyDefinitionError,
-                TimeDefinitionError):
-            exc_type, exc_value, exc_tb = sys.exc_info()
-            print >>sys.stderr, "Error type:", exc_type
-            print >>sys.stderr, "Error value:", exc_value
-            print >>sys.stderr, ''.join(traceback.format_tb(exc_tb))
+            _debug('about to run %r', job_class)
+            app_name = job_class.app_name
+            info = self.job_state_database.get(app_name)
+
+            last_success = None
+            now = utc_now()
+            try:
+                t0 = time.time()
+                for last_success in self._run_job(job_class, config, info):
+                    t1 = time.time()
+                    _debug(
+                        'successfully ran %r on %s',
+                        job_class,
+                        last_success
+                    )
+                    self._remember_success(job_class, last_success, t1 - t0)
+                    # _run_job() returns a generator, so we don't know how
+                    # many times this will loop. Anyway, we need to reset the
+                    # 't0' for the next loop if there is one.
+                    t0 = time.time()
+                exc_type = exc_value = exc_tb = None
+            except:
+                t1 = time.time()
+                exc_type, exc_value, exc_tb = sys.exc_info()
+
+                # when debugging tests that mock logging, uncomment this
+                # otherwise the exc_info=True doesn't compute and record what
+                # the exception was
+                #raise
+
+                if self.config.sentry and self.config.sentry.dsn:
+                    assert raven, "raven not installed"
+                    try:
+                        client = raven.Client(dsn=self.config.sentry.dsn)
+                        identifier = client.get_ident(
+                            client.captureException()
+                        )
+                        self.config.logger.info(
+                            'Error captured in Sentry. Reference: %s' %
+                            identifier
+                        )
+                    except Exception:
+                        # Blank exceptions like this is evil but a failure to
+                        # send the exception to Sentry is much less important
+                        # than for crontabber to carry on. This is especially
+                        # true considering that raven depends on network I/O.
+                        _debug('Failed to capture and send error to Sentry',
+                               exc_info=True)
+
+                _debug('error when running %r on %s',
+                       job_class, last_success, exc_info=True)
+                self._remember_failure(
+                    job_class,
+                    t1 - t0,
+                    exc_type,
+                    exc_value,
+                    exc_tb
+                )
+
+            finally:
+                self._log_run(job_class, seconds, time_, last_success, now,
+                              exc_type, exc_value, exc_tb)
+
+        @database_transaction()
+        def _remember_success(
+            self,
+            connection,
+            class_,
+            success_date,
+            duration
+        ):
+            app_name = class_.app_name
+            execute_no_results(
+                connection,
+                """INSERT INTO crontabber_log (
+                    app_name,
+                    success,
+                    duration
+                ) VALUES (
+                    %s,
+                    %s,
+                    %s
+                )""",
+                (app_name, success_date, '%.5f' % duration)
+            )
+
+        @database_transaction()
+        def _remember_failure(
+            self,
+            connection,
+            class_,
+            duration,
+            exc_type,
+            exc_value,
+            exc_tb
+        ):
+            exc_traceback = ''.join(traceback.format_tb(exc_tb))
+            app_name = class_.app_name
+            execute_no_results(
+                connection,
+                """INSERT INTO crontabber_log (
+                    app_name,
+                    duration,
+                    exc_type,
+                    exc_value,
+                    exc_traceback
+                ) VALUES (
+                    %s,
+                    %s,
+                    %s,
+                    %s,
+                    %s
+                )""",
+                (
+                    app_name,
+                    '%.5f' % duration,
+                    repr(exc_type),
+                    repr(exc_value),
+                    exc_traceback
+                )
+            )
+
+        def check_dependencies(self, class_):
+            try:
+                depends_on = class_.depends_on
+            except AttributeError:
+                # that's perfectly fine
+                return True, None
+            if isinstance(depends_on, basestring):
+                depends_on = [depends_on]
+            for dependency in depends_on:
+                try:
+                    job_info = self.job_state_database[dependency]
+                except KeyError:
+                    # the job this one depends on hasn't been run yet!
+                    return False, "%r hasn't been run yet" % dependency
+                if job_info.get('last_error'):
+                    # errored last time it ran
+                    return False, "%r errored last time it ran" % dependency
+                if job_info['next_run'] < utc_now():
+                    # the dependency hasn't recently run
+                    return False, "%r hasn't recently run" % dependency
+            # no reason not to stop this class
+            return True, None
+
+        def time_to_run(self, class_, time_):
+            """return true if it's time to run the job.
+            This is true if there is no previous information about its last run
+            or if the last time it ran and set its next_run to a date that is
+            now past.
+            """
+            app_name = class_.app_name
+            try:
+                info = self.job_state_database[app_name]
+            except KeyError:
+                if time_:
+                    h, m = [int(x) for x in time_.split(':')]
+                    # only run if this hour and minute is < now
+                    now = utc_now()
+                    if now.hour > h:
+                        return True
+                    elif now.hour == h and now.minute >= m:
+                        return True
+                    return False
+                else:
+                    # no past information, run now
+                    return True
+            next_run = info['next_run']
+            if next_run < utc_now():
+                return True
             return False
+
+        def _run_job(self, class_, config, info):
+            # here we go!
+            instance = class_(config, info)
+            return instance.main()
+
+        def _log_run(self, class_, seconds, time_, last_success, now,
+                     exc_type, exc_value, exc_tb):
+            assert inspect.isclass(class_)
+            app_name = class_.app_name
+            info = self.job_state_database.get(app_name, {})
+            depends_on = getattr(class_, 'depends_on', [])
+            if isinstance(depends_on, basestring):
+                depends_on = [depends_on]
+            elif not isinstance(depends_on, list):
+                depends_on = list(depends_on)
+            info['depends_on'] = depends_on
+            if 'first_run' not in info:
+                info['first_run'] = now
+            info['last_run'] = now
+            if last_success:
+                info['last_success'] = last_success
+            if exc_type:
+                # it errored, try very soon again
+                info['next_run'] = now + datetime.timedelta(
+                    seconds=self.config.crontabber.error_retry_time
+                )
+            else:
+                info['next_run'] = now + datetime.timedelta(seconds=seconds)
+                if time_:
+                    h, m = [int(x) for x in time_.split(':')]
+                    info['next_run'] = info['next_run'].replace(hour=h,
+                                                                minute=m,
+                                                                second=0,
+                                                                microsecond=0)
+
+            if exc_type:
+                tb = ''.join(traceback.format_tb(exc_tb))
+                info['last_error'] = {
+                    'type': exc_type,
+                    'value': str(exc_value),
+                    'traceback': tb,
+                }
+                info['error_count'] = info.get('error_count', 0) + 1
+            else:
+                info['last_error'] = {}
+                info['error_count'] = 0
+
+            self.job_state_database[app_name] = info
+
+        def configtest(self):
+            """return true if all configured jobs are configured OK"""
+            # similar to run_all() but don't actually run them
+            failed = 0
+
+            class_list = self.config.crontabber.jobs.class_list
+            class_list = self._reorder_class_list(class_list)
+            for class_name, __ in class_list:
+                class_config = self.config.crontabber['class-%s' % class_name]
+                if not self._configtest_one(class_config):
+                    failed += 1
+            return not failed
+
+        def _configtest_one(self, config):
+            try:
+                seconds = convert_frequency(config.frequency)
+                time_ = config.time
+                if time_:
+                    check_time(time_)
+                    # if less than 1 day, it doesn't make sense to specify hour
+                    if seconds < 60 * 60 * 24:
+                        raise FrequencyDefinitionError(config.time)
+                return True
+
+            except (JobNotFoundError,
+                    JobDescriptionError,
+                    FrequencyDefinitionError,
+                    TimeDefinitionError):
+                exc_type, exc_value, exc_tb = sys.exc_info()
+                print >>sys.stderr, "Error type:", exc_type
+                print >>sys.stderr, "Error value:", exc_value
+                print >>sys.stderr, ''.join(traceback.format_tb(exc_tb))
+                return False
+
+    return CronTabberAppClass
+
+
+# define basic CrontTabber & JobStateDatabase classes with using only the
+# defaults.
+CronTabber = get_crontabber_class()
+JobStateDatabase = \
+    CronTabber.get_required_config().crontabber.job_state_db_class.default
 
 
 def local_main():
