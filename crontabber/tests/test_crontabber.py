@@ -2021,7 +2021,7 @@ class TestCrontabber(IntegrationTestCaseBase):
                 ok_([x for x in infos if formatted in x])
 
     def test_get_crontabber_class(self):
-        my_jobs =  (
+        my_jobs = (
             'crontabber.tests.test_crontabber.FooJob|3d\n'
             'crontabber.tests.test_crontabber.BarJob|4d'
         )
@@ -2065,7 +2065,6 @@ class TestCrontabber(IntegrationTestCaseBase):
             app.CronTabber.get_required_config().crontabber.job_state_db_class
             .default.get_required_config().database_class.default
         )
-
 
 
 # =============================================================================
