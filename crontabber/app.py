@@ -1188,6 +1188,39 @@ class CronTabber(App):
             return False
 
 
+def get_crontabber_class(
+    default_jobs='',
+    default_database_class='crontabber.connection_factory.ConnectionFactoryXXX'):
+    cls = type(
+        'CronTabber',
+        (CronTabber,),
+        {
+            'required_config': CronTabber.get_required_config().safe_copy()
+        }
+    )
+    # cls.get_required_config().crontabber.job_state_db_class.default.required_config = \
+    #     CronTabber.get_required_config().crontabber.job_state_db_class.default.get_required_config().safe_copy()
+    # cls.get_required_config().crontabber.job_state_db_class.default.required_config = \
+    #     CronTabber.get_required_config().crontabber.job_state_db_class.default.get_required_config().safe_copy()
+    print "BEFORE"
+    print CronTabber.required_config.crontabber.job_state_db_class.default.required_config.database_class.default
+    cls.required_config.crontabber.job_state_db_class.default.required_config =  \
+        CronTabber.required_config.crontabber.job_state_db_class.default.required_config.safe_copy()
+    print cls.required_config.crontabber.job_state_db_class.default.required_config.database_class.default
+
+    cls.get_required_config().crontabber.jobs.default = default_jobs
+    cls.required_config.crontabber.database_class.default = \
+        default_database_class
+    cls.required_config.crontabber.job_state_db_class\
+        .default.required_config.database_class.default = default_database_class
+    print "AFTER"
+    print CronTabber.required_config.crontabber.job_state_db_class.default.required_config.database_class.default
+    print cls.required_config.crontabber.job_state_db_class.default.required_config.database_class.default
+
+
+    return cls
+
+
 def local_main():
     import sys
     import os
