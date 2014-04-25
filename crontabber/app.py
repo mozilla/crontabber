@@ -1226,7 +1226,7 @@ def local_main():
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
     if root not in sys.path:
         sys.path.append(root)
-    sys.exit(main(_CronTabberBase))
+    sys.exit(main(CronTabber))
 
 
 if __name__ == '__main__':  # pragma: no cover
