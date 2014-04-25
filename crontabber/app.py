@@ -5,7 +5,7 @@
 
 
 """
-CronTabber is a configman app for executing cron jobs.
+CronTabberPartial is a configman app for executing cron jobs.
 """
 import datetime
 import inspect
@@ -108,14 +108,8 @@ class BrokenJSONError(ValueError):
 _marker = object()
 
 
-class JobStateDatabase(RequiredConfig):
+class _JobStateDatabaseBase(RequiredConfig):
     required_config = Namespace()
-    required_config.add_option(
-        'database_class',
-        default='crontabber.connection_factory.ConnectionFactory',
-        from_string_converter=class_converter,
-        reference_value_from='resource.postgresql'
-    )
     required_config.add_option(
         'transaction_executor_class',
         default='crontabber.transaction_executor.TransactionExecutor',
@@ -140,8 +134,6 @@ class JobStateDatabase(RequiredConfig):
             execute_no_results,
             CREATE_CRONTABBER_LOG_SQL
         )
-
-
 
     def has_data(self):
         try:
@@ -615,7 +607,7 @@ def pipe_splitter(text):
     return text.split('|', 1)[0]
 
 
-class CronTabber(App):
+class _CronTabberBase(App):
 
     app_name = 'crontabber'
     app_version = __version__
@@ -626,35 +618,12 @@ class CronTabber(App):
     required_config.namespace('crontabber')
 
     required_config.crontabber.add_option(
-        name='job_state_db_class',
-        default=JobStateDatabase,
-        doc='Class to load and save the state and runs',
-    )
-
-    required_config.crontabber.add_option(
-        'jobs',
-        default='',
-        from_string_converter=classes_in_namespaces_converter_with_compression(
-            reference_namespace=Namespace(),
-            list_splitter_fn=line_splitter,
-            class_extractor=pipe_splitter,
-            extra_extractor=get_extra_as_options
-        )
-    )
-
-    required_config.crontabber.add_option(
         'error_retry_time',
         default=300,
         doc='number of seconds to re-attempt a job that failed'
     )
 
     # for local use, independent of the JSONAndPostgresJobDatabase
-    required_config.crontabber.add_option(
-        'database_class',
-        default='crontabber.connection_factory.ConnectionFactory',
-        from_string_converter=class_converter,
-        reference_value_from='resource.postgresql'
-    )
     required_config.crontabber.add_option(
         'transaction_executor_class',
         default='crontabber.transaction_executor.TransactionExecutor',
@@ -735,7 +704,7 @@ class CronTabber(App):
     )
 
     def __init__(self, config):
-        super(CronTabber, self).__init__(config)
+        super(_CronTabberBase, self).__init__(config)
         self.database_connection_factory = \
             self.config.crontabber.database_class(config.crontabber)
         self.transaction_executor = (
@@ -1186,6 +1155,69 @@ class CronTabber(App):
             print >>sys.stderr, "Error value:", exc_value
             print >>sys.stderr, ''.join(traceback.format_tb(exc_tb))
             return False
+
+
+def get_crontabber_class(
+    default_jobs='',
+    default_database_class='crontabber.connection_factory.ConnectionFactory'
+):
+    """This method will define a custom Crontabber class with the specified
+    defaults for the jobs and database_class.
+
+    When a user of this module wants an instance of the CronTabber class setup
+    for their needs, they just do this:
+
+        >>> from crontabber.app import get_crontabber_class
+        >>> my_jobs = [ ... ]
+        >>> my_database_class = ...
+        >>> CronTabber = get_crontabber_class(my_jobs, my_database_class)
+        >>> ct = CronTabber(my_config)
+
+    """
+    class JobStateDatabase(_JobStateDatabaseBase):
+        required_config = Namespace()
+        required_config.add_option(
+            'database_class',
+            default=default_database_class,
+            from_string_converter=class_converter,
+            reference_value_from='resource.postgresql'
+        )
+
+    class CronTabber(_CronTabberBase):
+        required_config = Namespace()
+        required_config.crontabber = (
+            _CronTabberBase.get_required_config().crontabber.safe_copy()
+        )
+        required_config.crontabber.add_option(
+            name='job_state_db_class',
+            default=JobStateDatabase,
+            doc='Class to load and save the state and runs',
+        )
+        required_config.crontabber.add_option(
+            'database_class',
+            default=default_database_class,
+            from_string_converter=class_converter,
+            reference_value_from='resource.postgresql'
+        )
+        required_config.crontabber.add_option(
+            'jobs',
+            default=default_jobs,
+            from_string_converter=
+            classes_in_namespaces_converter_with_compression(
+                reference_namespace=Namespace(),
+                list_splitter_fn=line_splitter,
+                class_extractor=pipe_splitter,
+                extra_extractor=get_extra_as_options
+            )
+        )
+
+    return CronTabber
+
+# define the original CrontTabber & JobStateDatabase classes with using only
+# the defaults.
+CronTabber = get_crontabber_class()
+JobStateDatabase = \
+    CronTabber.get_required_config().crontabber.job_state_db_class.default
 
 
 def local_main():

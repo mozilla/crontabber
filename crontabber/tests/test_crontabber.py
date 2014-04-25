@@ -2020,6 +2020,52 @@ class TestCrontabber(IntegrationTestCaseBase):
                 formatted = each.strftime('%Y-%m-%d')
                 ok_([x for x in infos if formatted in x])
 
+    def test_get_crontabber_class(self):
+        my_jobs = (
+            'crontabber.tests.test_crontabber.FooJob|3d\n'
+            'crontabber.tests.test_crontabber.BarJob|4d'
+        )
+        db_connection_class = 'my.ConnectionFactory'
+        CronTabberOne = app.get_crontabber_class(my_jobs, db_connection_class)
+        # make sure the jobs in the CronTabberOne class are our jobs
+        ok_(
+            CronTabberOne.get_required_config().crontabber.jobs.default is
+            my_jobs
+        )
+        # make sure the database connection factory in the CronTabberOne class
+        # is the factory that we specified
+        eq_(
+            CronTabberOne.get_required_config().crontabber.database_class
+            .default,
+            db_connection_class
+        )
+        # make sure the database connection factory was propagated to the
+        # JobStateDatabaseClass
+        eq_(
+            CronTabberOne.get_required_config().crontabber.job_state_db_class
+            .default.get_required_config().database_class.default,
+            db_connection_class
+        )
+        # make sure we didn't change the default CronTabber & JobStateDatabase
+        ok_(
+            CronTabberOne.get_required_config().crontabber.jobs.default is not
+            app.CronTabber.get_required_config().crontabber.jobs.default
+        )
+        ok_(
+            CronTabberOne.get_required_config().crontabber.database_class
+            .default
+            is not
+            app.CronTabber.get_required_config().crontabber.database_class
+            .default
+        )
+        ok_(
+            CronTabberOne.get_required_config().crontabber.job_state_db_class
+            .default.get_required_config().database_class.default
+            is not
+            app.CronTabber.get_required_config().crontabber.job_state_db_class
+            .default.get_required_config().database_class.default
+        )
+
 
 # =============================================================================
 # Various mock jobs that the tests depend on
