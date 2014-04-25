@@ -1,7 +1,0 @@
-#!/usr/bin/env python
-
-if __name__ == '__main__':
-    import sys
-    from crontabber.app import main, CronTabber
-    print sys.path
-    sys.exit(main(CronTabber))

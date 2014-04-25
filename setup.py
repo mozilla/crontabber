@@ -44,7 +44,6 @@ README = read('README.md')
 
 setup(
     name='crontabber',
-    #scripts=['run-crontabber'],
     entry_points={
         'console_scripts': ['crontabber = crontabber.app:local_main']
     },
