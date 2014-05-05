@@ -45,6 +45,16 @@ that same command above.
 Also, if you want `nosetests` to *not* capture `stdout` add `-s` to that
 same command as above.
 
+## How to do code coverage analysis
+
+First you need to install the [coverage]() module. Then, with
+`nosetests, you can run this:
+
+```
+PYTHONPATH=. nosetests --with-coverage --cover-erase --cover-html --cover-package=crontabber
+```
+After it has run, you can open the file `cover/index.html` in browser.
+
 ## How to run the exampleapp
 
 The example app helps you set up a playground to play around with and
