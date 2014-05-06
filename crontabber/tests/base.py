@@ -125,8 +125,6 @@ class IntegrationTestCaseBase(TestCaseBase):
     def setUp(self):
         super(IntegrationTestCaseBase, self).setUp()
         self.config = self.get_standard_config()
-        # instanciate one of these to make sure the tables are created
-        app.JobStateDatabase(self.config.crontabber)
 
         dsn = (
             'host=%(database_hostname)s '
@@ -142,7 +140,21 @@ class IntegrationTestCaseBase(TestCaseBase):
                 'real database'
             )
         self.conn = psycopg2.connect(dsn)
-        self._truncate()
+        cursor = self.conn.cursor()
+        cursor.execute('SHOW timezone;')
+        try:
+            failed = True
+            tz, = cursor.fetchone()
+            if tz != 'UTC':
+                cursor.execute("""
+                   ALTER DATABASE %(database_name)s SET TIMEZONE TO UTC;
+                """ % self.config.crontabber)
+            failed = False
+        finally:
+            failed and self.conn.rollback() or self.conn.commit()
+
+        # instanciate one of these to make sure the tables are created
+        app.JobStateDatabase(self.config.crontabber)
 
     def _truncate(self):
         self.conn.cursor().execute("""

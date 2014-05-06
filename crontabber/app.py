@@ -141,8 +141,6 @@ class JobStateDatabase(RequiredConfig):
             CREATE_CRONTABBER_LOG_SQL
         )
 
-
-
     def has_data(self):
         try:
             return bool(self.transaction_executor(
