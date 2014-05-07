@@ -47,7 +47,8 @@ same command as above.
 
 ## How to do code coverage analysis
 
-First you need to install the [coverage]() module. Then, with
+First you need to install the
+[coverage](http://nedbatchelder.com/code/coverage/) module. Then, with
 `nosetests, you can run this:
 
 ```
