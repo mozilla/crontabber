@@ -31,6 +31,7 @@ User Guide
    :maxdepth: 2
 
    user/intro
+   user/moreadvancedapps
 
 
 

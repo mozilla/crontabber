@@ -64,7 +64,9 @@ job. First change the line ``#jobs=''`` to this::
     jobs.myapp.MyFirstApp|5m
     '''
 
-Now ``crontabber`` is going to need to do the equivalent of::
+Now ``crontabber`` is going to need to do the equivalent of:
+
+.. code-block:: python
 
     from jobs.myapp import MyFirstApp
 
@@ -74,7 +76,9 @@ So, let's create a very simple sample app::
     touch jobs/__init__.py
     emacs jobs/myapp.py
 
-So now we're creating our app (``myapp.py``). Let's start with this::
+So now we're creating our app (``myapp.py``). Let's start with this:
+
+.. code-block:: python
 
     import datetime
     from crontabber.base import BaseCronApp
@@ -129,3 +133,15 @@ we last run it::
 Did it write another line to ``my-first-app.log``? Try waiting more than
 5 minutes and run again. You can run the above mentioned command as many times
 as you like.
+
+If you're curious how this state is remembered, you can open your database
+and look at the two tables it created automatically::
+
+    $ psql crontabber
+
+    crontabber=# select * from crontabber;
+    ...
+    crontabber=# select * from crontabber_log;
+    ...
+
+Let's move on to write :doc:`More Advanced Apps </user/moreadvancedapps>`.
