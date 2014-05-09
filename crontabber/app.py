@@ -13,7 +13,6 @@ import json
 import sys
 import time
 import traceback
-
 from functools import partial
 
 from dbapi2_util import (
@@ -45,7 +44,7 @@ from crontabber import __version__
 
 
 CREATE_CRONTABBER_SQL = """
-    CREATE TABLE IF NOT EXISTS crontabber (
+    CREATE TABLE crontabber (
         app_name text NOT NULL,
         next_run timestamp with time zone,
         first_run timestamp with time zone,
@@ -58,7 +57,7 @@ CREATE_CRONTABBER_SQL = """
 """
 
 CREATE_CRONTABBER_LOG_SQL = """
-    CREATE TABLE IF NOT EXISTS crontabber_log (
+    CREATE TABLE crontabber_log (
         id SERIAL NOT NULL,
         app_name text NOT NULL,
         log_time timestamp with time zone DEFAULT now() NOT NULL,
@@ -132,14 +131,34 @@ class JobStateDatabase(RequiredConfig):
             self.config,
             self.database_connection_factory
         )
-        self.transaction_executor(
-            execute_no_results,
-            CREATE_CRONTABBER_SQL
+
+        found = self.transaction_executor(
+            execute_query_fetchall,
+            "SELECT relname FROM pg_class "
+            "WHERE relname = 'crontabber'"
         )
-        self.transaction_executor(
-            execute_no_results,
-            CREATE_CRONTABBER_LOG_SQL
+        if not found:
+            self.config.logger.info(
+                "Creating crontabber table: crontabber"
+            )
+            self.transaction_executor(
+                execute_no_results,
+                CREATE_CRONTABBER_SQL
+            )
+
+        found = self.transaction_executor(
+            execute_query_fetchall,
+            "SELECT relname FROM pg_class "
+            "WHERE relname = 'crontabber_log'"
         )
+        if not found:
+            self.config.logger.info(
+                "Creating crontabber table: crontabber_log"
+            )
+            self.transaction_executor(
+                execute_no_results,
+                CREATE_CRONTABBER_LOG_SQL
+            )
 
     def has_data(self):
         try:
