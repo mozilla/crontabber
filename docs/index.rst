@@ -32,6 +32,7 @@ User Guide
 
    user/intro
    user/moreadvancedapps
+   user/nagios
 
 
 
