@@ -103,8 +103,8 @@ with the correct configuration to automatically connect with Postgres and
 handle transactions automatically.  The three decorators provide differing 
 levels of automation so that you can choose how much control you want.
 
-@with_postgres_transactions
-...........................
+@with_postgres_transactions()
+.............................
 
 This decorator tells crontabber that you want to use postgres by adding to 
 your class two class attributes: ``self.database_connection_factory`` and 
@@ -135,23 +135,25 @@ If an exception is raised and that exception escapes outside of your function,
 then the transaction will be automatically rolled back.
 
 .. code-block:: python
-    #...
-    def execute_lots_of_sql(connection, sql_in_a_list):
-        '''run multiple sql statements in a single transaction'''
-        cursor = connection.cursor()
-        for an_sql_statement in sql_in_a_list:
-           cursor.execute(an_sql_statement)
 
-    def run(self):
-        sql = [
-            'insert into A (a, b, c) values (2, 3, 4)”,
-            'update A set a=26 where b > 11',
-            'drop table B'
-        ]
-        self.database_transaction_executor(
-            execute_lots_of_sql,
-            sql_in_a_list
-        )
+    @with_postgres_transactions()
+    class MyPGApp(BaseCronApp):
+        def execute_lots_of_sql(connection, sql_in_a_list):
+            '''run multiple sql statements in a single transaction'''
+            cursor = connection.cursor()
+            for an_sql_statement in sql_in_a_list:
+               cursor.execute(an_sql_statement)
+
+        def run(self):
+            sql = [
+                'insert into A (a, b, c) values (2, 3, 4)”,
+                'update A set a=26 where b > 11',
+                'drop table B'
+            ]
+            self.database_transaction_executor(
+                execute_lots_of_sql,
+                sql_in_a_list
+            )
 
 @with_postgres_connection_as_argument()
 .......................................
@@ -162,7 +164,7 @@ connection as its first argument:
 
 .. code-block:: python
 
-    @with_postgres_transactions
+    @with_postgres_transactions()
     @with_postgres_connection_as_argument()
     class MyCrotabberApp(BaseCronApp):
         app_name = 'postgres-enabled-app'
@@ -182,8 +184,8 @@ You still have the transaction manager available if you want to use it.  Note,
 however, that it will acquire its own database connection and not use the one 
 that was passed into your run function.  Don't deadlock yourself.
 
-@with_single_postgres_transaction
-.................................
+@with_single_postgres_transaction()
+...................................
 
 This decorator gives you the most automation.  It considers your entire run 
 function to be a single postgres transaction.  You're handed a connection 
@@ -194,7 +196,7 @@ being raised, the connection will be rolled back automatically.
 
 .. code-block:: python
 
-    @with_postgres_transactions
+    @with_postgres_transactions()
     @with_single_postgres_transaction()
     class MyCrotabberApp(BaseCronApp):
         app_name = 'postgres-enabled-app'
