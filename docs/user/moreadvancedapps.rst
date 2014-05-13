@@ -97,20 +97,20 @@ the ``crontabber`` will adjust these times in ``UTC`` time.
 Postgres specific apps
 ----------------------
 
-``crontabber`` provides several class decorators to make use of postrges 
-easier within a crontabber app.  These decorators can imbue your app class 
-with the correct configuration to automatically connect with Postgres and 
-handle transactions automatically.  The three decorators provide differing 
+``crontabber`` provides several class decorators to make use of postrges
+easier within a crontabber app.  These decorators can imbue your app class
+with the correct configuration to automatically connect with Postgres and
+handle transactions automatically.  The three decorators provide differing
 levels of automation so that you can choose how much control you want.
 
 @with_postgres_transactions()
 .............................
 
-This decorator tells crontabber that you want to use postgres by adding to 
-your class two class attributes: ``self.database_connection_factory`` and 
-``self.database_transaction_executor``.  When execution reaches your run 
-method, you may use these two attributes to talk to postgres.  If you want 
-a connection to Postgres you can grab one from the 
+This decorator tells crontabber that you want to use postgres by adding to
+your class two class attributes: ``self.database_connection_factory`` and
+``self.database_transaction_executor``.  When execution reaches your run
+method, you may use these two attributes to talk to postgres.  If you want
+a connection to Postgres you can grab one from the
 ``database_connection_factory`` and use it as a context manager:
 
 .. code-block:: python
@@ -119,19 +119,19 @@ a connection to Postgres you can grab one from the
     with self.database_connection_factory() as pg_connection:
         cursor = pg_connection.cursor()
 
-The connection that you get from the factory is a psycopg2 connection, 
-so you have all the resources of that module available for use with your 
-connection.  You don't have to worry about opening or closing the connection, 
-the contextmananger will do that for you.  The connection is open and ready 
-to use when it is handed to you, and is closed when the context ends.  You are 
+The connection that you get from the factory is a psycopg2 connection,
+so you have all the resources of that module available for use with your
+connection.  You don't have to worry about opening or closing the connection,
+the contextmananger will do that for you.  The connection is open and ready
+to use when it is handed to you, and is closed when the context ends.  You are
 responsible for transactions within the lifetime of the context.
 
-If you want help with transactions, there is also a the 
-``database_transaction_executor`` at your service.  Give it a function that 
-accepts a database connection as its first argument, and it will execute the 
-function within a postgres transaction.   If your function ends normally (with 
-or without a return value), the transaction will be automatically committed.  
-If an exception is raised and that exception escapes outside of your function, 
+If you want help with transactions, there is also a the
+``database_transaction_executor`` at your service.  Give it a function that
+accepts a database connection as its first argument, and it will execute the
+function within a postgres transaction.   If your function ends normally (with
+or without a return value), the transaction will be automatically committed.
+If an exception is raised and that exception escapes outside of your function,
 then the transaction will be automatically rolled back.
 
 .. code-block:: python
@@ -158,8 +158,8 @@ then the transaction will be automatically rolled back.
 @with_postgres_connection_as_argument()
 .......................................
 
-This decorator is to be used in conjunction with the previous decorator.  When 
-using this decorator, your run method must be declared with a database 
+This decorator is to be used in conjunction with the previous decorator.  When
+using this decorator, your run method must be declared with a database
 connection as its first argument:
 
 .. code-block:: python
@@ -173,26 +173,26 @@ connection as its first argument:
             cursor = connection.cursor()
             # ...
 
-With this decorator, the database connection is handed to you.  You don't 
-have to get it yourself.  You don't have to worry about closing the connection, 
-it will be closed for you when your 'run' function ends.  However, you are 
-still responsible for your own transactions: you must explicitly use 'commit' 
-or 'rollback'.  If you do not 'commit' your changes, they will be lost when 
-the connection gets closed at the  end of your function.  
+With this decorator, the database connection is handed to you.  You don't
+have to get it yourself.  You don't have to worry about closing the connection,
+it will be closed for you when your 'run' function ends.  However, you are
+still responsible for your own transactions: you must explicitly use 'commit'
+or 'rollback'.  If you do not 'commit' your changes, they will be lost when
+the connection gets closed at the  end of your function.
 
-You still have the transaction manager available if you want to use it.  Note, 
-however, that it will acquire its own database connection and not use the one 
+You still have the transaction manager available if you want to use it.  Note,
+however, that it will acquire its own database connection and not use the one
 that was passed into your run function.  Don't deadlock yourself.
 
 @with_single_postgres_transaction()
 ...................................
 
-This decorator gives you the most automation.  It considers your entire run 
-function to be a single postgres transaction.  You're handed a connection 
-through the parameters to your run function.  You use that connection to 
-accomplish database stuff.  If your run function exits normally, the 'commit' 
-will happen automatically.  If your run function exits with a Exception 
-being raised, the connection will be rolled back automatically.  
+This decorator gives you the most automation.  It considers your entire run
+function to be a single postgres transaction.  You're handed a connection
+through the parameters to your run function.  You use that connection to
+accomplish database stuff.  If your run function exits normally, the 'commit'
+will happen automatically.  If your run function exits with a Exception
+being raised, the connection will be rolled back automatically.
 
 .. code-block:: python
 
@@ -208,12 +208,12 @@ being raised, the connection will be rolled back automatically.
             if bad_situation_detected():
                 raise GetMeOutOfHereError()
 
-In this example, connections are as automatic as we can make them.  
-If the exception is raised, the insert will be rolled back.  If the exception 
+In this example, connections are as automatic as we can make them.
+If the exception is raised, the insert will be rolled back.  If the exception
 is not raised and the 'run' function exits normally, the insert will be committed.
 
-Running command line jobs
--------------------------
+@with_subprocess
+----------------
 
 ``crontabber`` is all Python but some of the tasks might be something other
 than Python. For example, you might want to run ``rm /var/logs/oldjunk.log``

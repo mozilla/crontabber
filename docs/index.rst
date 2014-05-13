@@ -34,6 +34,8 @@ User Guide
    user/moreadvancedapps
    user/nagios
    user/backfillablejobs
+   user/runningfrombash
+   user/advancedconfiguration
 
 
 Indices and tables
