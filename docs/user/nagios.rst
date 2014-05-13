@@ -44,7 +44,8 @@ This is very simple. You simply use the ``--nagios`` parameter. Like this::
 
 
 The rules for which exit code to exit on are fairly simple. However, you
-need to understand a bit more about backfillable jobs.
+need to understand a bit more about
+:doc:`Backfillable Jobs </user/backfillablejobs>`.
 
 If no application in your configuration has errored in the last run
 the exit code is simply ``0`` ("OK").

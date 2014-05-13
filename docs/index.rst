@@ -33,7 +33,7 @@ User Guide
    user/intro
    user/moreadvancedapps
    user/nagios
-
+   user/backfillablejobs
 
 
 Indices and tables
