@@ -12,7 +12,7 @@ up dependency management. This is important to note. The name of the Python
 file or the name of class does not matter.
 
 Diving in, let's now create two more apps. For simplicity we can continue
-in the file ``myapp.py`` you created. Add this::
+in the file ``myapp.py`` you created. Add this:
 
 .. code-block:: python
 
