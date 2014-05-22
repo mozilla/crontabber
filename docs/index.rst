@@ -36,6 +36,7 @@ User Guide
    user/backfillablejobs
    user/runningfrombash
    user/advancedconfiguration
+   user/advancedsettings
 
 
 Indices and tables
