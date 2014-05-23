@@ -36,6 +36,8 @@ User Guide
    user/advancedconfiguration
    user/advancedsettings
 
+   developer/contributing
+
 
 Indices and tables
 ==================
