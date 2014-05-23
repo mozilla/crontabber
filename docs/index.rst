@@ -37,6 +37,7 @@ User Guide
    user/advancedsettings
 
    developer/contributing
+   developer/runningtests
 
 
 Indices and tables
