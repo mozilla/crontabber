@@ -166,7 +166,7 @@ connection as its first argument:
 
     @with_postgres_transactions()
     @with_postgres_connection_as_argument()
-    class MyCrotabberApp(BaseCronApp):
+    class MyCrontabberApp(BaseCronApp):
         app_name = 'postgres-enabled-app'
         def run(self, connection):
             # the connection is live and ready to use
@@ -198,7 +198,7 @@ being raised, the connection will be rolled back automatically.
 
     @with_postgres_transactions()
     @with_single_postgres_transaction()
-    class MyCrotabberApp(BaseCronApp):
+    class MyCrontabberApp(BaseCronApp):
         app_name = 'postgres-enabled-app'
 
         def run(self, connection):
