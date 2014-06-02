@@ -36,6 +36,7 @@ User Guide
    user/advancedconfiguration
    user/advancedsettings
    user/raven
+   user/commandlineoptions
 
    developer/contributing
    developer/runningtests
