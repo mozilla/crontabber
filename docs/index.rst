@@ -35,6 +35,7 @@ User Guide
    user/runningfrombash
    user/advancedconfiguration
    user/advancedsettings
+   user/raven
 
    developer/contributing
    developer/runningtests
