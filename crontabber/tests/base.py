@@ -112,16 +112,13 @@ class IntegrationTestCaseBase(TestCaseBase):
                 configman.ConfigFileFutureProxy,
                 environment,
             ],
-            # app_name='crontabber',
-            # app_name=app.CronTabber.app_name,
             app_name='test-crontabber',
             app_description=__doc__,
-            # argv_source=[]
         )
 
-        with config_manager.context() as config:
-            config.crontabber.logger = mock.Mock()
-            return config
+        config = config_manager.get_config()
+        config.crontabber.logger = mock.Mock()
+        return config
 
     def setUp(self):
         super(IntegrationTestCaseBase, self).setUp()
