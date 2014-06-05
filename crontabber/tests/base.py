@@ -132,12 +132,12 @@ class IntegrationTestCaseBase(TestCaseBase):
             'user=%(database_username)s '
             'password=%(database_password)s' % self.config.crontabber
         )
-        if not ('dbname=test' in dsn or 'dbname=travis_ci_test'):
+        if not ('dbname=test' in dsn or 'dbname=travis_ci_test' in dsn):
             raise ValueError(
                 'test database must be called test_ something '
                 '(or travis_ci_test) or '
                 'else there is a risk you might be testing against a '
-                'real database'
+                'real database. Not %r' % (self.config.crontabber.database_name,)
             )
         self.conn = psycopg2.connect(dsn)
         cursor = self.conn.cursor()
