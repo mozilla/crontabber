@@ -196,13 +196,16 @@ class IntegrationTestCaseBase(TestCaseBase):
             'error_count', 'depends_on', 'last_error'
         )
         structure = {}
-        for record in cursor.fetchall():
-            row = dict(zip(columns, record))
-            last_error = row.pop('last_error')
-            if isinstance(last_error, basestring):
-                last_error = json.loads(last_error)
-            row['last_error'] = last_error
-            structure[row.pop('app_name')] = row
+        try:
+            for record in cursor.fetchall():
+                row = dict(zip(columns, record))
+                last_error = row.pop('last_error')
+                if isinstance(last_error, basestring):
+                    last_error = json.loads(last_error)
+                row['last_error'] = last_error
+                structure[row.pop('app_name')] = row
+        finally:
+            self.conn.commit()
         return structure
 
     def _load_logs(self):
@@ -224,7 +227,10 @@ class IntegrationTestCaseBase(TestCaseBase):
             'exc_type', 'exc_value', 'exc_traceback'
         )
         logs = defaultdict(list)
-        for record in cursor.fetchall():
-            row = dict(zip(columns, record))
-            logs[row.pop('app_name')].append(row)
+        try:
+            for record in cursor.fetchall():
+                row = dict(zip(columns, record))
+                logs[row.pop('app_name')].append(row)
+        finally:
+            self.conn.commit()
         return logs
