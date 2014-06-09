@@ -1767,15 +1767,14 @@ class TestCrontabber(IntegrationTestCaseBase):
 
                 # use this formatter so that we don't have to compare
                 # datetimes with microseconds
-                format = lambda x: x.strftime('%Y%m%d %H:%M %Z')
-                eq_(
-                    format(dates_used[FooBackfillJob][0]),
-                    format(dates_used[FooBarBackfillJob][0])
+                self.assertAlmostEqual(
+                    dates_used[FooBackfillJob][0],
+                    dates_used[FooBarBackfillJob][0]
                 )
                 # also check the others
-                eq_(
-                    format(dates_used[BarBackfillJob][0]),
-                    format(dates_used[FooBarBackfillJob][0])
+                self.assertAlmostEqual(
+                    dates_used[BarBackfillJob][0],
+                    dates_used[FooBarBackfillJob][0]
                 )
 
                 structure = self._load_structure()
