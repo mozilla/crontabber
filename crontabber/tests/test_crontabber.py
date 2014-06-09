@@ -20,9 +20,9 @@ from crontabber.datetimeutil import utc_now
 from configman import Namespace
 from crontabber.mixins import (
     as_backfill_cron_app,
-    with_postgres_transactions,
+    using_postgres,
     with_postgres_connection_as_argument,
-    with_single_postgres_transaction
+    as_single_postgres_transaction
 )
 
 from .base import IntegrationTestCaseBase
@@ -2030,7 +2030,7 @@ class _Job(base.BaseCronApp):
         self.config.logger.info("Ran %s" % self.__class__.__name__)
 
 
-@with_postgres_transactions()
+@using_postgres()
 @with_postgres_connection_as_argument()
 class _PGJob(_Job):
 
@@ -2038,8 +2038,8 @@ class _PGJob(_Job):
         _Job.run(self)
 
 
-@with_postgres_transactions()
-@with_single_postgres_transaction()
+@using_postgres()
+@as_single_postgres_transaction()
 class _PGTransactionManagedJob(_Job):
 
     def run(self, connection):
@@ -2205,7 +2205,7 @@ class SlowBackfillJob(_BackfillJob):
         super(SlowBackfillJob, self).run(date)
 
 
-@with_postgres_transactions()
+@using_postgres()
 @with_postgres_connection_as_argument()
 @as_backfill_cron_app
 class PGBackfillJob(_Job):
@@ -2227,7 +2227,7 @@ class PGBackfillJob(_Job):
         )
 
 
-@with_postgres_transactions()
+@using_postgres()
 @with_postgres_connection_as_argument()
 @as_backfill_cron_app
 class PostgresBackfillSampleJob(_Job):
