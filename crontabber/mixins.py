@@ -114,6 +114,11 @@ def with_resource_connection_as_argument(resource_name):
     _run_proxy method that passes a databsase connection as a context manager
     into the CronApp's run method.  The connection will automatically be closed
     when the ConApp's run method ends.
+
+    In order for this dectorator to function properly, it must be used in
+    conjunction with previous dectorator, "with_transactional_resource" or
+    equivalent.  This decorator depends on the mechanims added by that
+    decorator.
     """
     connection_factory_attr_name = '%s_connection_factory' % resource_name
 
@@ -139,6 +144,10 @@ def with_single_transaction(resource_name):
     connection will automatically be commited.  Any abnormal exit from 'run'
     will result in the connnection being rolledback.
 
+    In order for this dectorator to function properly, it must be used in
+    conjunction with previous dectorator, "with_transactional_resource" or
+    equivalent.  This decorator depends on the mechanims added by that
+    decorator.
     """
     transaction_executor_attr_name = "%s_transaction_executor" % resource_name
 
@@ -194,9 +203,9 @@ def with_subprocess(cls):
 #     self.database_transaction_executor
 # when using this definition as a class decorator, it is necessary to use
 # parenthesis as it is a function call:
-#    @with_postgres_transactions()
+#    @using_postgres()
 #    class MyClass ...
-with_postgres_transactions = partial(
+using_postgres = partial(
     with_transactional_resource,
     'crontabber.connection_factory.ConnectionFactory',
     'database'
@@ -209,12 +218,14 @@ with_postgres_transactions = partial(
 # completes.
 # when using this definition as a class decorator, it is necessary to use
 # parenthesis as it is a function call:
-#    @with_postgres_transactions()
+#    @using_postgres()
+#    @with_postgres_connection_as_argument()
 #    class MyClass ...
 with_postgres_connection_as_argument = partial(
     with_resource_connection_as_argument,
     'database'
 )
+
 #------------------------------------------------------------------------------
 # this class decorator adds a _run_proxy method to the class that will
 # call the class' run method in the context of a database transaction.  It
@@ -223,9 +234,15 @@ with_postgres_connection_as_argument = partial(
 # escaping the run function will result in a "rollback"
 # when using this definition as a class decorator, it is necessary to use
 # parenthesis as it is a function call:
-#    @with_postgres_transactions()
+#    @using_postgres()
+#    @as_single_postgres_transaction()
 #    class MyClass ...
-with_single_postgres_transaction = partial(
+as_single_postgres_transaction = partial(
     with_single_transaction,
     'database'
 )
+
+
+# backwards compatibility
+with_postgres_transactions = using_postgres
+with_single_postgres_transaction = as_single_postgres_transaction

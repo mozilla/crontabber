@@ -94,8 +94,8 @@ class TestCrontabMixins(unittest.TestCase):
         ok_(hasattr(Alpha, '_run_proxy'))
         ok_(hasattr(Alpha, 'run_process'))
 
-    def test_with_postgres_transactions(self):
-        @ctm.with_postgres_transactions()
+    def test_using_postgres(self):
+        @ctm.using_postgres()
         class Alpha(BaseCronApp):
             def __init__(self, config):
                 self.config = config
@@ -110,7 +110,7 @@ class TestCrontabMixins(unittest.TestCase):
         )
 
     def test_with_postgres_connection_as_argument(self):
-        @ctm.with_postgres_transactions()
+        @ctm.using_postgres()
         @ctm.with_postgres_connection_as_argument()
         class Alpha(BaseCronApp):
             def __init__(self, config):
@@ -118,9 +118,7 @@ class TestCrontabMixins(unittest.TestCase):
         ok_(hasattr(Alpha, '_run_proxy'))
 
     def test_no_over_propagation(self):
-
-
-        @ctm.with_postgres_transactions()
+        @ctm.using_postgres()
         class Alpha(BaseCronApp):
             required_config = Namespace()
             required_config.add_option('a', default=0)
