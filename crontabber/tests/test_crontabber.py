@@ -803,6 +803,55 @@ class TestCrontabber(IntegrationTestCaseBase):
             ok_(output.count('FrequencyDefinitionError'))
             ok_('23:59' in output)
 
+    def test_audit_ghosts_nothing(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.FooJob|3d\n'
+            'crontabber.tests.test_crontabber.BarJob|4d'
+        )
+
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            old_stderr = sys.stderr
+            new_stderr = StringIO()
+            sys.stderr = new_stderr
+            old_stdout = sys.stdout
+            new_stdout = StringIO()
+            sys.stdout = new_stdout
+            config['audit-ghosts'] = True
+
+            try:
+                assert tab.main() == 0
+            finally:
+                sys.stderr = old_stderr
+                sys.stdout = old_stdout
+            ok_(not new_stderr.getvalue())
+            ok_(not new_stdout.getvalue())
+
+    def test_audit_ghosts_something(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.FooJob|3d\n'
+            'crontabber.tests.test_crontabber.BarJob|4d'
+        )
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            tab.run_all()
+
+        # change the config and name stop configuring the `bar` job
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.FooJob|3d'
+        )
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            old_stdout = sys.stdout
+            new_stdout = StringIO()
+            sys.stdout = new_stdout
+            config['audit-ghosts'] = True
+            try:
+                assert tab.main() == 0
+            finally:
+                sys.stdout = old_stdout
+            ok_('\tbar' in new_stdout.getvalue())
+
     @mock.patch('crontabber.app.utc_now')
     @mock.patch('crontabber.base.utc_now')
     def test_basic_job_at_specific_hour(self,

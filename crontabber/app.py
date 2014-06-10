@@ -716,6 +716,14 @@ class CronTabber(App):
     )
 
     required_config.add_option(
+        name='audit-ghosts',
+        default=False,
+        doc='Checks if there jobs in the database that is not configured.',
+        exclude_from_print_conf=True,
+        exclude_from_dump_conf=True,
+    )
+
+    required_config.add_option(
         name='reset-job',
         default='',
         doc='Pretend a job has never been run',
@@ -773,6 +781,9 @@ class CronTabber(App):
             return 0
         elif self.config.get('reset-job'):
             self.reset_job(self.config.get('reset-job'))
+            return 0
+        elif self.config.get('audit-ghosts'):
+            self.audit_ghosts()
             return 0
         elif self.config.get('configtest'):
             if not self.configtest():
@@ -1203,6 +1214,27 @@ class CronTabber(App):
             print >>sys.stderr, "Error value:", exc_value
             print >>sys.stderr, ''.join(traceback.format_tb(exc_tb))
             return False
+
+    def audit_ghosts(self):
+        """compare the list of configured jobs with the jobs in the state"""
+        print_header = True
+        for app_name in self._get_ghosts():
+            if print_header:
+                print_header = False
+                print (
+                    "Found the following in the state database but not "
+                    "available as a configured job:"
+                )
+            print "\t%s" % (app_name,)
+
+    def _get_ghosts(self):
+        class_list = self.config.crontabber.jobs.class_list
+        class_list = self._reorder_class_list(class_list)
+        configured_app_names = []
+        for __, job_class in class_list:
+            configured_app_names.append(job_class.app_name)
+        state_app_names = self.job_state_database.keys()
+        return set(state_app_names) - set(configured_app_names)
 
 
 def local_main():
