@@ -19,9 +19,9 @@ Next, in the root directory of the project create a file called
 
 
     [crontabber]
-    database_username=myusername
-    database_password=mypassword
-    database_name=test_crontabber
+    user=myusername
+    password=mypassword
+    dbname=test_crontabber
 
 To start all the tests run::
 

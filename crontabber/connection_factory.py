@@ -22,34 +22,34 @@ class ConnectionFactory(RequiredConfig):
     # to a database.
     required_config = Namespace()
     required_config.add_option(
-        name='database_hostname',
+        name='host',
         default='localhost',
         doc='the hostname of the database',
         reference_value_from='resource.postgresql',
     )
     required_config.add_option(
-        name='database_name',
+        name='dbname',
         default='',
         doc='the name of the database',
         reference_value_from='resource.postgresql',
     )
     required_config.add_option(
-        name='database_port',
+        name='port',
         default=5432,
         doc='the port for the database',
         reference_value_from='resource.postgresql',
     )
     required_config.add_option(
-        name='database_username',
+        name='user',
         default='',
         doc='the name of the user within the database',
-        reference_value_from='secrets.postgresql',
+        reference_value_from='resource.postgresql',
     )
     required_config.add_option(
-        name='database_password',
+        name='password',
         default='',
         doc="the user's database password",
-        reference_value_from='secrets.postgresql',
+        reference_value_from='resource.postgresql',
     )
 
     # clients of this class may need to detect Exceptions raised in the
@@ -73,11 +73,11 @@ class ConnectionFactory(RequiredConfig):
         if local_config is None:
             local_config = config
         self.dsn = (
-            "host=%(database_hostname)s "
-            "dbname=%(database_name)s "
-            "port=%(database_port)s "
-            "user=%(database_username)s "
-            "password=%(database_password)s"
+            "host=%(host)s "
+            "dbname=%(dbname)s "
+            "port=%(port)s "
+            "user=%(user)s "
+            "password=%(password)s"
             % local_config
         )
         self.operational_exceptions = (

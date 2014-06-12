@@ -12,9 +12,18 @@ import logging.handlers
 import functools
 import signal
 
+from configman import (
+    ConfigurationManager,
+    Namespace,
+    RequiredConfig,
+    command_line,
+    ConfigFileFutureProxy,
+    class_converter
+)
+from configman.dotdict import DotDictWithAcquisition
 
-from configman import ConfigurationManager, Namespace, RequiredConfig
-from configman.converters import class_converter
+environment = DotDictWithAcquisition(os.environ)
+environment.always_ignore_mismatches = True
 
 
 #==============================================================================
@@ -221,6 +230,14 @@ def _do_main(
     config_path=None,
     config_manager_cls=ConfigurationManager
 ):
+    if values_source_list is None:
+        values_source_list = [
+            ConfigFileFutureProxy,
+            environment,
+            command_line
+        ]
+
+
     global restart
     restart = False
     if isinstance(initial_app, basestring):

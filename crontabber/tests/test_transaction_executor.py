@@ -18,6 +18,7 @@ from crontabber.dbapi2_util import (
     SQLDidNotReturnSingleValue,
     SQLDidNotReturnSingleRow
 )
+from crontabber.generic_app import environment
 
 
 class SomeError(Exception):
@@ -103,7 +104,7 @@ class TestTransactionExecutor(unittest.TestCase):
             app_name='testapp',
             app_version='1.0',
             app_description='app description',
-            values_source_list=[],
+            values_source_list=[environment],
             argv_source=[]
         )
         with config_manager.context() as config:
@@ -144,7 +145,7 @@ class TestTransactionExecutor(unittest.TestCase):
             app_name='testapp',
             app_version='1.0',
             app_description='app description',
-            values_source_list=[],
+            values_source_list=[environment],
             argv_source=[]
         )
         with config_manager.context() as config:
@@ -183,7 +184,7 @@ class TestTransactionExecutor(unittest.TestCase):
             app_name='testapp',
             app_version='1.0',
             app_description='app description',
-            values_source_list=[],
+            values_source_list=[environment],
             argv_source=[]
         )
         with config_manager.context() as config:
@@ -223,7 +224,10 @@ class TestTransactionExecutor(unittest.TestCase):
             app_name='testapp',
             app_version='1.0',
             app_description='app description',
-            values_source_list=[{'backoff_delays': [2, 4, 6, 10, 15]}],
+            values_source_list=[
+                environment,
+                {'backoff_delays': [2, 4, 6, 10, 15]}
+            ],
             argv_source=[]
         )
         with config_manager.context() as config:
@@ -284,7 +288,10 @@ class TestTransactionExecutor(unittest.TestCase):
             app_name='testapp',
             app_version='1.0',
             app_description='app description',
-            values_source_list=[{'backoff_delays': [2, 4, 6, 10, 15]}],
+            values_source_list=[
+                environment,
+                {'backoff_delays': [2, 4, 6, 10, 15]}
+            ],
             argv_source=[]
         )
         with config_manager.context() as config:
@@ -346,7 +353,10 @@ class TestTransactionExecutor(unittest.TestCase):
             app_name='testapp',
             app_version='1.0',
             app_description='app description',
-            values_source_list=[{'backoff_delays': [2, 4, 6, 10, 15]}],
+            values_source_list=[
+                environment,
+                {'backoff_delays': [2, 4, 6, 10, 15]}
+            ],
             argv_source=[]
         )
         with config_manager.context() as config:
@@ -441,7 +451,7 @@ class TestTransactionExecutor(unittest.TestCase):
             app_name='testapp',
             app_version='1.0',
             app_description='app description',
-            values_source_list=[],
+            values_source_list=[environment],
             argv_source=[]
         )
         with config_manager.context() as config:

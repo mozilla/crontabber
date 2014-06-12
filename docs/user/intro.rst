@@ -33,7 +33,7 @@ all default settings left commented out.
 
 Before we can start writing our first app we need to set credentials to
 connect to Postgres. Open your newly created ``crontabber.ini`` file and look
-for the settings: ``database_name``, ``database_username`` and ``database_password``.
+for the settings: ``dbname``, ``user`` and ``password``.
 Perhaps you want to create a new database first to test against::
 
     createdb crontabber
@@ -41,9 +41,9 @@ Perhaps you want to create a new database first to test against::
 Depending on how you have set up Postgres server you might need to supply a
 username and password. Proceed to edit your ``crontabber.ini`` and set::
 
-    database_name=crontabber
-    database_username=myusername
-    database_password=mypostgrespassword
+    dbname=crontabber
+    user=myusername
+    password=mypostgrespassword
 
 You can see where the default settings are set and you can change those lines.
 Let's try to see if it works::
