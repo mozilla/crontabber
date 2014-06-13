@@ -29,7 +29,11 @@ def as_backfill_cron_app(cls):
 
 
 #==============================================================================
-def with_transactional_resource(transactional_resource_class, resource_name):
+def with_transactional_resource(
+    transactional_resource_class,
+    resource_name,
+    reference_value_from=None
+):
     """a class decorator for Crontabber Apps.  This decorator will give access
     to a resource connection source.  Configuration will be automatically set
     up and the cron app can expect to have attributes:
@@ -63,12 +67,14 @@ def with_transactional_resource(transactional_resource_class, resource_name):
             '%s_class' % resource_name,
             default=transactional_resource_class,
             from_string_converter=class_converter,
+            reference_value_from=reference_value_from,
         )
         new_req[resource_name].add_option(
             '%s_transaction_executor_class' % resource_name,
             default='crontabber.transaction_executor.TransactionExecutor',
             doc='a class that will execute transactions',
             from_string_converter=class_converter,
+            reference_value_from=reference_value_from
         )
         cls.required_config = new_req
 
@@ -208,7 +214,8 @@ def with_subprocess(cls):
 using_postgres = partial(
     with_transactional_resource,
     'crontabber.connection_factory.ConnectionFactory',
-    'database'
+    'database',
+    'resource.postgresql'
 )
 #------------------------------------------------------------------------------
 # this class decorator adds a _run_proxy method to the class that will

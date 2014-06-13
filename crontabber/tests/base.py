@@ -16,9 +16,10 @@ from nose.plugins.attrib import attr
 from nose.tools import eq_
 
 import configman
+from configman.dotdict import DotDictWithAcquisition
 
 from crontabber import app
-
+from crontabber.generic_app import environment
 
 class TestCaseBase(unittest.TestCase):
 
@@ -48,11 +49,11 @@ class TestCaseBase(unittest.TestCase):
 
         value_source = [
             configman.ConfigFileFutureProxy,
-            configman.environment,
+            environment,
             {
                 'logger': mock_logging,
                 'crontabber.jobs': jobs_string,
-                'admin.strict': True,
+                'admin.strict': False,
             },
             extra_value_source,
         ]
@@ -109,7 +110,7 @@ class IntegrationTestCaseBase(TestCaseBase):
              app.JobStateDatabase.get_required_config()],
             values_source_list=[
                 configman.ConfigFileFutureProxy,
-                configman.environment,
+                environment,
             ],
             # app_name='crontabber',
             # app_name=app.CronTabber.app_name,
@@ -126,20 +127,10 @@ class IntegrationTestCaseBase(TestCaseBase):
         super(IntegrationTestCaseBase, self).setUp()
         self.config = self.get_standard_config()
 
-        dsn = (
-            'host=%(database_hostname)s '
-            'dbname=%(database_name)s '
-            'user=%(database_username)s '
-            'password=%(database_password)s' % self.config.crontabber
+        db_connection_factory = self.config.crontabber.database_class(
+            self.config.crontabber
         )
-        if not ('dbname=test' in dsn or 'dbname=travis_ci_test'):
-            raise ValueError(
-                'test database must be called test_ something '
-                '(or travis_ci_test) or '
-                'else there is a risk you might be testing against a '
-                'real database'
-            )
-        self.conn = psycopg2.connect(dsn)
+        self.conn = db_connection_factory.connection()
         cursor = self.conn.cursor()
         cursor.execute('SHOW timezone;')
         try:

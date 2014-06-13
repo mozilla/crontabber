@@ -12,6 +12,8 @@ import crontabber.mixins as ctm
 from crontabber.connection_factory import ConnectionFactory
 from crontabber.transaction_executor import TransactionExecutor
 
+from crontabber.generic_app import environment
+
 
 class FakeResourceClass(object):
     pass
@@ -60,7 +62,7 @@ class TestCrontabMixins(unittest.TestCase):
         )
         cm = ConfigurationManager(
             definition_source=[Alpha.get_required_config(), ],
-            values_source_list=[],
+            values_source_list=[environment],
             argv_source=[],
         )
         config = cm.get_config()

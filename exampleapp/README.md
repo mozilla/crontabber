@@ -11,8 +11,8 @@
 2. Now you need to edit crontabber.ini. It can be quite scary.
    The first two things to do are:
 
-   1. Find the settings `database_name`, `database_user`,
-   `database_password` etc. and uncomment them accordingly.
+   1. Find the settings `dbname`, `user`,
+   `password` etc. and uncomment them accordingly.
 
    2. The `jobs` setting is the most important one. For now, change it
    to `foo.FooCronApp|10m`
