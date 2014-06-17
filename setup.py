@@ -40,7 +40,16 @@ def find_tests_require():
             if x.strip() and not x.startswith('#')]
 
 
-README = read('README.md')
+try:
+    import pypandoc
+    README = pypandoc.convert('README.md', 'rst')
+except (IOError, ImportError, OSError, RuntimeError) as x:
+    import sys
+    print >> sys.stderr, "Unable to convert README.md to reStructuredText"
+    print >> sys.stderr, sys.exc_info()[0]
+    print >> sys.stderr, x
+    README = read('README.md')
+
 
 setup(
     name='crontabber',
