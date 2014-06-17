@@ -92,6 +92,23 @@ about exactly when they run they simply ignore both the ``--job=`` and
 even the ``--force`` parameter.
 
 
+``--audit-ghosts``
+------------------
+
+This command finds jobs that are in the state database but no longer
+anywhere in your configuration. For example, suppose you decide to
+change your list of configured jobs after they have been run. At that point
+there will be so called "ghosts". I.e. jobs that are in the database
+but not in the config.
+
+But be careful though! You might have 1 database but two different
+configuration files. For example, you might have one configuration called
+``virtualenv-X-crontabber.ini`` and one called ``virtualenv-Y-crontabber.ini``.
+So the term "ghosts" is only applicable to one configuration file basically.
+
+If you know for certain that a job is no longer needed and stuck as a ghost
+in the state database, then use ``--reset-job=`` (see above) to clear it out.
+
 ``--version``
 -------------
 
