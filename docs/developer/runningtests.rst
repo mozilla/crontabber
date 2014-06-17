@@ -18,7 +18,8 @@ Next, in the root directory of the project create a file called
 ``test-crontabber.ini`` and it should look something like this::
 
 
-    [crontabber]
+    [resource]
+    [[postgresql]]
     user=myusername
     password=mypassword
     dbname=test_crontabber
