@@ -6,7 +6,7 @@
 1. To run this example, you need to first generate a crontabber.ini
    file. You do that with::
 
-   crontabber --admin.print_config=ini > crontabber.ini
+   crontabber --admin.print_conf=ini > crontabber.ini
 
 2. Now you need to edit crontabber.ini. It can be quite scary.
    The first two things to do are:
