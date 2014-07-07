@@ -97,7 +97,7 @@ the ``crontabber`` will adjust these times in ``UTC`` time.
 Postgres specific apps
 ----------------------
 
-``crontabber`` provides several class decorators to make use of postrges
+``crontabber`` provides several class decorators to make use of postgres
 easier within a crontabber app.  These decorators can imbue your app class
 with the correct configuration to automatically connect with Postgres and
 handle transactions automatically.  The three decorators provide differing
@@ -122,7 +122,7 @@ a connection to Postgres you can grab one from the
 The connection that you get from the factory is a psycopg2 connection,
 so you have all the resources of that module available for use with your
 connection.  You don't have to worry about opening or closing the connection,
-the contextmananger will do that for you.  The connection is open and ready
+the context manager will do that for you.  The connection is open and ready
 to use when it is handed to you, and is closed when the context ends.  You are
 responsible for transactions within the lifetime of the context.
 
