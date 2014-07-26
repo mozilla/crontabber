@@ -119,7 +119,7 @@ OK. Brace yourself, we're about to run ``crontabber`` for the first time::
 
     crontabber --admin.conf=crontabber.ini
 
-Remember that our little app does. It creates a file called
+Remember what our little app does. It creates a file called
 ``my-first-app.log``. Open that file and you should see something like::
 
     $ cat my-first-app.log
