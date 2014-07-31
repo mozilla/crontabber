@@ -150,6 +150,22 @@ class TestStateDatabase(IntegrationTestCaseBase):
         }
         ok_(self.database.has_data())
 
+    def test_migration_of_ongoing_field(self):
+        # this makes sure the table exists
+        self.database = app.JobStateDatabase(self.config.crontabber)
+        self.conn.cursor().execute("""
+        ALTER TABLE crontabber DROP COLUMN ongoing
+        """)
+        self.conn.commit()
+        # this will run the migration
+        self.database = app.JobStateDatabase(self.config.crontabber)
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT column_name FROM information_schema.columns
+            WHERE table_name='crontabber' AND column_name='ongoing'
+        """)
+        ok_(cursor.fetchone())
+
     def test_iterate_app_names(self):
         app_names = set()
         for app_name in self.database:
@@ -229,7 +245,8 @@ class TestStateDatabase(IntegrationTestCaseBase):
             'last_success': None,
             'depends_on': [],
             'error_count': 0,
-            'last_error': {}
+            'last_error': {},
+            'ongoing': None,
         }
         self.database['foo'] = data
         eq_(self.database['foo'], data)
@@ -242,7 +259,8 @@ class TestStateDatabase(IntegrationTestCaseBase):
             'last_success': utc_now(),
             'depends_on': ['bar'],
             'error_count': 1,
-            'last_error': {}
+            'last_error': {},
+            'ongoing': None
         }
         bar = {
             'next_run': utc_now(),
@@ -251,7 +269,8 @@ class TestStateDatabase(IntegrationTestCaseBase):
             'last_success': None,
             'depends_on': [],
             'error_count': 2,
-            'last_error': {}
+            'last_error': {},
+            'ongoing': None
         }
         self.database['foo'] = foo
         self.database['bar'] = bar
@@ -274,7 +293,8 @@ class TestStateDatabase(IntegrationTestCaseBase):
             'last_success': None,
             'depends_on': [],
             'error_count': 0,
-            'last_error': {}
+            'last_error': {},
+            'ongoing': None,
         }
         self.database['foo'] = foo
         eq_(self.database.get('foo'), foo)
@@ -288,7 +308,8 @@ class TestStateDatabase(IntegrationTestCaseBase):
             'last_success': None,
             'depends_on': [],
             'error_count': 0,
-            'last_error': {}
+            'last_error': {},
+            'ongoing': None,
         }
         self.database['foo'] = foo
         popped_foo = self.database.pop('foo')
@@ -359,6 +380,7 @@ class TestCrontabber(IntegrationTestCaseBase):
                 information['last_run'],
                 information['last_success']
             )
+            ok_(not information['ongoing'])
 
             # run it again and nothing should happen
             count_infos = len([x for x in infos if 'Ran BasicJob' in x])
@@ -403,8 +425,8 @@ class TestCrontabber(IntegrationTestCaseBase):
 
             infos = [x[0][0] for x in config.logger.info.call_args_list]
             infos = [x for x in infos if x.startswith('Ran ')]
-            ok_('Ran FooJob' in infos)
-            ok_('Ran BarJob' in infos)
+            ok_('Ran FooJob' in infos, infos)
+            ok_('Ran BarJob' in infos, infos)
             ok_(infos.index('Ran FooJob') <
                 infos.index('Ran BarJob'))
             count = len(infos)
@@ -445,6 +467,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             eq_(information['error_count'], 1)
             ok_(information['last_error'])
             ok_(not information.get('last_success'), {})
+            ok_(not information['ongoing'])
             today = utc_now()
             self.assertAlmostEqual(today, information['last_run'])
             _next_run = utc_now() + datetime.timedelta(seconds=100)
@@ -1160,6 +1183,7 @@ class TestCrontabber(IntegrationTestCaseBase):
 
             structure = self._load_structure()
             information = structure['foo-backfill']
+            ok_(not information['last_error'])
             eq_(information['first_run'], information['last_run'])
 
             # last_success might be a few microseconds off

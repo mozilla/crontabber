@@ -176,12 +176,13 @@ class IntegrationTestCaseBase(TestCaseBase):
                 last_success,
                 error_count,
                 depends_on,
-                last_error
+                last_error,
+                ongoing
             FROM crontabber;
         """)
         columns = (
             'app_name', 'next_run', 'first_run', 'last_run', 'last_success',
-            'error_count', 'depends_on', 'last_error'
+            'error_count', 'depends_on', 'last_error', 'ongoing'
         )
         structure = {}
         try:
