@@ -1256,7 +1256,7 @@ class CronTabber(App):
         return set(state_app_names) - set(configured_app_names)
 
 
-def local_main():
+def local_main():  # pragma: no cover
     import sys
     import os
     root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
