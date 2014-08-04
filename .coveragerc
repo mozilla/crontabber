@@ -1,2 +1,6 @@
 [run]
 source = crontabber
+
+[report]
+omit = crontabber/tests/*
+       crontabber/.versions/*
