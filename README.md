@@ -4,6 +4,8 @@ A cron job runner with self-healing and job dependencies.
 
 License: [MPL 2](http://www.mozilla.org/MPL/2.0/)
 
+[![Coverage Status](https://coveralls.io/repos/mozilla/crontabber/badge.png)](https://coveralls.io/r/mozilla/crontabber)
+
 ## How to run tests
 
 First you need to create a dedicated test database. We recommend you call
