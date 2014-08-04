@@ -17,8 +17,13 @@ install:
     - python setup.py install
 
 script:
-    - user=postgres dbname=travis_ci_test nosetests crontabber
+    - user=postgres dbname=travis_ci_test nosetests crontabber --with-cover --cover-erase --cover-package=crontabber
 
 notifications:
     irc:
         channels: "irc.mozilla.org#breakpad"
+
+after_success:
+    # Report coverage results to coveralls.io
+    - pip install coveralls --use-mirrors
+    - coveralls
