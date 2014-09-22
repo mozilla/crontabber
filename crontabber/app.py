@@ -609,7 +609,7 @@ def pipe_splitter(text):
     return text.split('|', 1)[0]
 
 
-class CronTabber(App):
+class CronTabberBase(RequiredConfig):
 
     app_name = 'crontabber'
     app_version = __version__
@@ -737,7 +737,7 @@ class CronTabber(App):
     )
 
     def __init__(self, config):
-        super(CronTabber, self).__init__(config)
+        super(CronTabberBase, self).__init__(config)
         self.database_connection_factory = \
             self.config.crontabber.database_class(config.crontabber)
         self.transaction_executor = (
@@ -1254,6 +1254,22 @@ class CronTabber(App):
             configured_app_names.append(job_class.app_name)
         state_app_names = self.job_state_database.keys()
         return set(state_app_names) - set(configured_app_names)
+
+
+class CronTabber(CronTabberBase, App):
+    """This class mixes in the CronTabberBase class with the default runnable
+    application infrastructure: crontabber.generic_app.App.  Having the
+    CronTabberBase decoupled from the App class allows CrontTabber to integrate
+    seemlessly into a different system for setting up and running an app.
+
+    One of the primary clients of CronTabber is Socorro. In fact CronTabber
+    was spun off from Socorro as an indepentent app.  Initially they had
+    identical copies of the App base class.  To allow the two projects to
+    evolve indepentenly, the CronTabber App class was separated from the
+    CronTabberBase class.  This allows Socorro to declare its own CronTabberApp
+    that derives from the Socorro App class instead of the
+    crontabber.generic_app.App class"""
+    # no new methods are required, the two base classes have everything
 
 
 def local_main():  # pragma: no cover
