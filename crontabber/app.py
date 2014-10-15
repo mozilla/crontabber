@@ -787,7 +787,7 @@ class CronTabberBase(RequiredConfig):
 
     @property
     def job_state_database(self):
-        if not getattr(self, '_job_state_db', None):
+        if not getattr(self, '_job_state_database', None):
             self._job_state_database = (
                 self.config.crontabber.job_state_db_class(
                     self.config.crontabber
