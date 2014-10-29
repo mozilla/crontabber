@@ -32,8 +32,7 @@ deploy:
     provider: pypi
     user: peterbe
     password:
-        secure: pLLUb5KUKlK+/G05WxbWhv0TCBqtsdgK6FylIca1EkfvVeVSEZzbL/ptSKt47cIUypm6tkbcG2QE1FzCD/Oj/JnttJyQg0UMOFnobbYqaldgDYi6LXNejG4/5SqNkMu0yabkcK0nKx2s614lCAUypvWZrX5KYh61vHT/+Asxqek=
+        secure: WtHO5O92hH46GHeIJBlkwMgkF/oLiftIsC9Ff9bl00+vTk97NdnvGjfLa78haJIs1WNOm+gKhzIAF/q/cipJ2wdGQRoZ178NhZimhamUMfDQoaNPolKfFSQ6uA+GLQPXo7N/AGH18S8AwCwTcWObaUTQhnAxoCzAHTv1sG1hSFo=
     on:
         repo: mozilla/crontabber
-        branch: master
     distributions: "sdist bdist_wheel"
