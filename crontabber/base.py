@@ -5,6 +5,7 @@
 import collections
 import datetime
 import re
+from toposort import toposort_flatten
 
 from datetimeutil import utc_now
 from configman import Namespace, RequiredConfig
@@ -46,9 +47,6 @@ def reorder_dag(sequence,
                          an infinite loop.
     """
 
-    ordered_jobs = []
-    ordered_jobs_set = set()
-
     jobs = collections.defaultdict(list)
     map_ = {}
     _count_roots = 0
@@ -68,20 +66,14 @@ def reorder_dag(sequence,
 
     if not _count_roots:
         raise CircularDAGError("No job is at the root")
-    count = 0
-    while len(ordered_jobs) < len(jobs.keys()):
-        for job, deps in jobs.iteritems():
-            if job in ordered_jobs_set:
-                continue
-            if not set(deps).issubset(ordered_jobs_set):
-                continue
-            ordered_jobs.append(job)
-            ordered_jobs_set = set(ordered_jobs)
-        count += 1
-        if count > impatience_max:
-            raise CircularDAGError("Circular reference somewhere")
 
-    return [map_[x] for x in ordered_jobs]
+    try:
+        jobs = dict(zip(jobs.keys(), map(set, jobs.values())))
+        ordered_jobs = list(toposort_flatten(jobs))
+    except ValueError, e:
+        raise CircularDAGError(e)
+
+    return [map_[x] for x in ordered_jobs if x in map_]
 
 
 #==============================================================================
