@@ -5,6 +5,7 @@
 import collections
 import datetime
 import re
+import functools
 
 from datetimeutil import utc_now
 from configman import Namespace, RequiredConfig
@@ -18,6 +19,65 @@ class FrequencyDefinitionError(Exception):
 #==============================================================================
 class CircularDAGError(Exception):
     pass
+
+
+#==============================================================================
+
+# The following two functions have been plucked from
+# https://bitbucket.org/ericvsmith/toposort but modified so it works
+# in Python 2.6.
+
+def toposort(data):
+    """Dependencies are expressed as a dictionary whose keys are items
+and whose values are a set of dependent items. Output is a list of
+sets in topological order. The first set consists of items with no
+dependences, each subsequent set consists of items that depend upon
+items in the preceeding sets.
+"""
+
+    # Special case empty input.
+    if len(data) == 0:
+        return
+
+    # Copy the input so as to leave it unmodified.
+    data = data.copy()
+
+    # Ignore self dependencies.
+    for k, v in data.items():
+        v.discard(k)
+    # Find all items that don't depend on anything.
+    extra_items_in_deps = functools.reduce(
+        set.union, data.values()
+    ) - set(data.keys())
+
+    # Add empty dependences where needed.
+    data.update(dict((item, set()) for item in extra_items_in_deps))
+    while True:
+        ordered = set(item for item, dep in data.items() if len(dep) == 0)
+        if not ordered:
+            break
+        yield ordered
+        data = dict(
+            (item, (dep - ordered))
+            for item, dep in data.items()
+            if item not in ordered
+        )
+    if len(data) != 0:
+        raise ValueError(
+            'Cyclic dependencies exist among these items: {}'
+            .format(', '.join(repr(x) for x in data.items()))
+        )
+
+
+def toposort_flatten(data, sort=True):
+    """Returns a single list of dependencies. For any set returned by
+toposort(), those items are sorted and appended to the result (just to
+make the results deterministic)."""
+
+    result = []
+    for d in toposort(data):
+        result.extend((sorted if sort else list)(d))
+    return result
 
 
 #==============================================================================
@@ -46,9 +106,6 @@ def reorder_dag(sequence,
                          an infinite loop.
     """
 
-    ordered_jobs = []
-    ordered_jobs_set = set()
-
     jobs = collections.defaultdict(list)
     map_ = {}
     _count_roots = 0
@@ -68,20 +125,14 @@ def reorder_dag(sequence,
 
     if not _count_roots:
         raise CircularDAGError("No job is at the root")
-    count = 0
-    while len(ordered_jobs) < len(jobs.keys()):
-        for job, deps in jobs.iteritems():
-            if job in ordered_jobs_set:
-                continue
-            if not set(deps).issubset(ordered_jobs_set):
-                continue
-            ordered_jobs.append(job)
-            ordered_jobs_set = set(ordered_jobs)
-        count += 1
-        if count > impatience_max:
-            raise CircularDAGError("Circular reference somewhere")
 
-    return [map_[x] for x in ordered_jobs]
+    try:
+        jobs = dict(zip(jobs.keys(), map(set, jobs.values())))
+        ordered_jobs = list(toposort_flatten(jobs))
+    except ValueError, e:
+        raise CircularDAGError(e)
+
+    return [map_[x] for x in ordered_jobs if x in map_]
 
 
 #==============================================================================

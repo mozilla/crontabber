@@ -129,8 +129,20 @@ class TestReordering(unittest.TestCase):
             sequence
         )
 
+    def test_topological_sort(self):
+        sequence = [
+            _Item('A', []),
+            _Item('B', ['A']),
+            _Item('C', ['B']),
+            _Item('D', []),
+            _Item('E', ['A', 'B']),
+            _Item('F', ['C', 'D', 'E']),
+        ]
+        new_sequence = base.reorder_dag(sequence)
+        new_names = [x.app_name for x in new_sequence]
+        eq_(new_names, ['A', 'D', 'B', 'C', 'E', 'F'])
 
-# =============================================================================
+
 @attr(integration='postgres')
 class TestStateDatabase(IntegrationTestCaseBase):
 
@@ -321,7 +333,6 @@ class TestStateDatabase(IntegrationTestCaseBase):
         assert_raises(KeyError, self.database.pop, 'bar')
 
 
-# =============================================================================
 @attr(integration='postgres')
 class TestCrontabber(IntegrationTestCaseBase):
 
@@ -512,7 +523,7 @@ class TestCrontabber(IntegrationTestCaseBase):
             infos = [x for x in infos if x.startswith('Ran ')]
             eq_(
                 infos,
-                ['Ran BasicJob', 'Ran TroubleJob', 'Ran FooJob']
+                ['Ran BasicJob', 'Ran FooJob', 'Ran TroubleJob']
             )
             # note how SadJob couldn't be run!
             # let's see what information we have
