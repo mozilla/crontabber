@@ -1,0 +1,22 @@
+{
+    "name": "Crontabber",
+    "description": "A cron job runner with self-healing and job dependencies.",
+    "repository": {
+        "url": "https://github.com/mozilla/crontabber",
+        "license": "MPL2",
+        "tests": "https://travis-ci.org/mozilla/crontabber"
+    },
+    "participate": {
+        "home": "https://github.com/mozilla/crontabber",
+        "docs": "http://crontabber.readthedocs.org/en/latest/",
+        "irc": "irc://irc.mozilla.org/#webeng",
+        "irc-contacts": ["peterbe"]
+    },
+    "bugs": {
+        "list": "https://github.com/mozilla/crontabber/issues",
+        "report": "https://github.com/mozilla/crontabber/issues/new"
+    },
+    "keywords": [
+        "python"
+    ]
+}
