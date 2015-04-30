@@ -2103,6 +2103,52 @@ class TestCrontabber(IntegrationTestCaseBase):
                 formatted = each.strftime('%Y-%m-%d')
                 ok_([x for x in infos if formatted in x])
 
+    def test_job_list_comma_separated(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.FooJob|3d,'  # <-- note comma!
+            'crontabber.tests.test_crontabber.BarJob|4d'
+        )
+
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            assert tab.main() == 0
+
+            infos = [x[0][0] for x in config.logger.info.call_args_list]
+            infos = [x for x in infos if x.startswith('Ran ')]
+            ok_('Ran FooJob' in infos, infos)
+            ok_('Ran BarJob' in infos, infos)
+
+    def test_job_list_semicolon_separated(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.FooJob|3d;'  # <-- note!
+            'crontabber.tests.test_crontabber.BarJob|4d'
+        )
+
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            assert tab.main() == 0
+
+            infos = [x[0][0] for x in config.logger.info.call_args_list]
+            infos = [x for x in infos if x.startswith('Ran ')]
+            ok_('Ran FooJob' in infos, infos)
+            ok_('Ran BarJob' in infos, infos)
+
+    def test_job_list_separated_sloppily(self):
+        config_manager = self._setup_config_manager(
+            ',\n,;,\n\n,'
+            'crontabber.tests.test_crontabber.FooJob|3d ; \n'
+            'crontabber.tests.test_crontabber.BarJob|4d,'
+        )
+
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            assert tab.main() == 0
+
+            infos = [x[0][0] for x in config.logger.info.call_args_list]
+            infos = [x for x in infos if x.startswith('Ran ')]
+            ok_('Ran FooJob' in infos, infos)
+            ok_('Ran BarJob' in infos, infos)
+
 
 # =============================================================================
 # Various mock jobs that the tests depend on

@@ -7,6 +7,7 @@
 """
 CronTabber is a configman app for executing cron jobs.
 """
+import re
 import datetime
 import inspect
 import json
@@ -601,7 +602,7 @@ def check_time(value):
 
 
 def line_splitter(text):
-    return [x.strip() for x in text.splitlines()
+    return [x.strip() for x in re.split('\n|,|;', text.strip())
             if x.strip() and not x.strip().startswith('#')]
 
 
