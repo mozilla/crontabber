@@ -5,9 +5,10 @@
 import re
 import sys
 import datetime
-import time
 import unittest
 import collections
+import time
+import threading
 from cStringIO import StringIO
 
 import mock
@@ -2170,6 +2171,170 @@ class TestCrontabber(IntegrationTestCaseBase):
             ok_('Ran FooJob' in infos, infos)
             ok_('Ran BarJob' in infos, infos)
 
+    def test_run_two_jobs_simultaneously_first_time(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.SlowJob|1h\n'
+        )
+
+        def runner(manager):
+            with manager.context() as config:
+                tab = app.CronTabber(config)
+                assert tab.main() == 0
+
+        threads = [
+            threading.Thread(
+                target=runner, args=(config_manager,)
+            ),
+            threading.Thread(
+                target=runner, args=(config_manager,)
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        structure = self._load_structure()
+        information = structure['slow-job']
+        eq_(information['error_count'], 0)
+        eq_(information['last_error'], {})
+        ok_(not information['ongoing'])
+
+        logs = self._load_logs()
+        eq_(len(logs['slow-job']), 2)
+        first, second = logs['slow-job']
+        # only one should be successful, the other fail
+        ok_(first['exc_value'] or second['exc_value'])
+        ok_(first['exc_value'] != second['exc_value'])
+        error_class_name = app.DuplicateAppInsertError.__name__
+        ok_(
+            (first['exc_value'] or '').startswith(error_class_name) or
+            (second['exc_value'] or '').startswith(error_class_name)
+        )
+
+    def test_run_two_jobs_simultaneously_second_time(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.SlowJob|1h\n'
+        )
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            assert tab.main() == 0
+
+        state = tab.job_state_database['slow-job']
+        self._wind_clock(state, hours=1)
+        tab.job_state_database['slow-job'] = state
+
+        logs = self._load_logs()
+        eq_(len(logs['slow-job']), 1)
+
+        def runner(manager):
+            with manager.context() as config:
+                tab = app.CronTabber(config)
+                assert tab.main() == 0
+
+        threads = [
+            threading.Thread(
+                target=runner, args=(config_manager,)
+            ),
+            threading.Thread(
+                target=runner, args=(config_manager,)
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        # let's look now at what was run and shouldn't have run more
+        # than one of them
+
+        structure = self._load_structure()
+        information = structure['slow-job']
+        eq_(information['error_count'], 0)
+        eq_(information['last_error'], {})
+        ok_(not information['ongoing'])
+
+        logs = self._load_logs()
+        first, second, third = logs['slow-job']
+        ok_(first['success'])
+        # one of those should have been successful the other not
+        ok_(second['success'] or third['success'])
+        # the python way of doing an XOR
+        ok_(second['success'] != third['success'])
+        error_class_name = app.RowLevelLockError.__name__
+        ok_(
+            (second['exc_value'] or '').startswith(error_class_name) or
+            (third['exc_value'] or '').startswith(error_class_name)
+        )
+        # xor the exceptions
+        ok_(second['exc_value'] != third['exc_value'])
+
+    def test_run_two_distinct_jobs_simultaneously_second_time(self):
+        config_manager1 = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.SlowJob|1h\n'
+        )
+        with config_manager1.context() as config:
+            tab = app.CronTabber(config)
+            assert tab.main() == 0
+
+        config_manager2 = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.SlowAlsoJob|1h\n'
+        )
+        with config_manager2.context() as config:
+            tab = app.CronTabber(config)
+            assert tab.main() == 0
+
+        state = tab.job_state_database['slow-job']
+        self._wind_clock(state, hours=1)
+        tab.job_state_database['slow-job'] = state
+
+        state = tab.job_state_database['slow-also-job']
+        self._wind_clock(state, hours=1)
+        tab.job_state_database['slow-also-job'] = state
+
+        def runner(manager):
+            with manager.context() as config:
+                tab = app.CronTabber(config)
+                assert tab.main() == 0
+
+        threads = [
+            threading.Thread(
+                target=runner, args=(config_manager1,)
+            ),
+            threading.Thread(
+                target=runner, args=(config_manager2,)
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        # let's look now at what was run and shouldn't have run more
+        # than one of them
+        structure = self._load_structure()
+
+        information = structure['slow-job']
+        eq_(information['error_count'], 0)
+        eq_(information['last_error'], {})
+        ok_(not information['ongoing'])
+
+        information = structure['slow-also-job']
+        eq_(information['error_count'], 0)
+        eq_(information['last_error'], {})
+        ok_(not information['ongoing'])
+
+        logs = self._load_logs()
+        # Both jobs should have succeeded both times even though
+        # they started at the same time.
+        first, second = logs['slow-job']
+        ok_(first['success'])
+        ok_(second['success'])
+
+        first, second = logs['slow-also-job']
+        ok_(first['success'])
+        ok_(second['success'])
+
 
 # =============================================================================
 # Various mock jobs that the tests depend on
@@ -2220,12 +2385,22 @@ class FooBarJob(_Job):
 
 
 class SlowJob(_Job):
-    # an app that takes a whole second to run
+    # an app that takes a long time to run
     app_name = 'slow-job'
 
     def run(self):
-        time.sleep(1)  # time.sleep() is a mock function by the way
+        # in some tests this time.sleep gets mocked out
+        time.sleep(.2)
         super(SlowJob, self).run()
+
+
+class SlowAlsoJob(_Job):
+    # similar to SlowJob but different/independent :)
+    app_name = 'slow-also-job'
+
+    def run(self):
+        time.sleep(0.2)
+        super(SlowAlsoJob, self).run()
 
 
 class TroubleJob(_Job):
