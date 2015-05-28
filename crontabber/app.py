@@ -16,6 +16,8 @@ import time
 import traceback
 from functools import partial
 
+from psycopg2 import OperationalError, IntegrityError, ProgrammingError
+
 from dbapi2_util import (
     single_value_sql,
     SQLDidNotReturnSingleValue,
@@ -56,6 +58,11 @@ CREATE_CRONTABBER_SQL = """
         depends_on text[],
         last_error json
     );
+"""
+
+CREATE_CRONTABBER_APP_NAME_UNIQUE_INDEX = """
+    CREATE UNIQUE INDEX crontabber_unique_app_name_idx
+    ON crontabber (app_name);
 """
 
 CREATE_CRONTABBER_LOG_SQL = """
@@ -105,6 +112,31 @@ class JobDescriptionError(Exception):
 class BrokenJSONError(ValueError):
     pass
 
+
+class RowLevelLockError(OperationalError):
+    """The reason for defining this exception is that when you attempt
+    to read from a row that is actively locked (by another
+    thread/process) is that you get an OperationalError which isn't
+    particular developer-friendly because it might look like there's
+    some other more fundamental error such as a bad network connection
+    or something wrong with the credentials.
+    By giving it a name, it's more clear in the crontabber_log what
+    exactly was the reason why that second thread/process couldn't
+    work on that row a simultaneously.
+    """
+    pass
+
+
+class DuplicateAppInsertError(IntegrityError):
+    """The reason for defining this class is similar to the reasoning
+    of the RowLevelLockError exception class.
+    When two simultaneous attempts are made at inserting the same
+    app_name into the crontabber state, we get an IntegrityError
+    because there's a uniqueness index on that column.
+    By re-defining the error under a different "name" it becomes more
+    clear, when looking at the logs, what went wrong.
+    """
+    pass
 
 _marker = object()
 
@@ -166,6 +198,15 @@ class JobStateDatabase(RequiredConfig):
                     "ALTER TABLE crontabber ADD ongoing TIMESTAMP "
                     "WITH TIME ZONE"
                 )
+        # check that we have set the unique index on the app_name
+        try:
+            self.transaction_executor(
+                execute_no_results,
+                CREATE_CRONTABBER_APP_NAME_UNIQUE_INDEX
+            )
+        except ProgrammingError as exception:
+            if 'already exists' not in exception.args[0]:
+                raise
 
         found = self.transaction_executor(
             execute_query_fetchall,
@@ -296,7 +337,9 @@ class JobStateDatabase(RequiredConfig):
                 """SELECT app_name
                 FROM crontabber
                 WHERE
-                    app_name = %s""",
+                    app_name = %s
+                FOR UPDATE NOWAIT
+                """,
                 (key,)
             )
             # the key exists, do an update
@@ -314,6 +357,11 @@ class JobStateDatabase(RequiredConfig):
                 WHERE
                     app_name = %(app_name)s
             """
+        except OperationalError as exception:
+            if 'could not obtain lock' in exception.args[0]:
+                raise RowLevelLockError(exception.args[0])
+            else:
+                raise
         except SQLDidNotReturnSingleValue:
             # the key does not exist, do an insert
             next_sql = """
@@ -353,12 +401,18 @@ class JobStateDatabase(RequiredConfig):
             ),
             'ongoing': value.get('ongoing'),
         }
-
-        execute_no_results(
-            connection,
-            next_sql,
-            parameters
-        )
+        try:
+            execute_no_results(
+                connection,
+                next_sql,
+                parameters
+            )
+        except IntegrityError as exception:
+            # See CREATE_CRONTABBER_APP_NAME_UNIQUE_INDEX for why
+            # we know to look for this mentioned in the error message.
+            if 'crontabber_unique_app_name_idx' in exception.args[0]:
+                raise DuplicateAppInsertError(exception.args[0])
+            raise
 
     @database_transaction()
     def copy(self, connection):
@@ -1021,7 +1075,13 @@ class CronTabberBase(RequiredConfig):
                           exc_type, exc_value, exc_tb)
 
     @database_transaction()
-    def _remember_success(self, connection, class_, success_date, duration):
+    def _remember_success(
+        self,
+        connection,
+        class_,
+        success_date,
+        duration,
+    ):
         app_name = class_.app_name
         execute_no_results(
             connection,
@@ -1034,7 +1094,7 @@ class CronTabberBase(RequiredConfig):
                 %s,
                 %s
             )""",
-            (app_name, success_date, '%.5f' % duration)
+            (app_name, success_date, '%.5f' % duration),
         )
 
     @database_transaction()
@@ -1045,7 +1105,7 @@ class CronTabberBase(RequiredConfig):
         duration,
         exc_type,
         exc_value,
-        exc_tb
+        exc_tb,
     ):
         exc_traceback = ''.join(traceback.format_tb(exc_tb))
         app_name = class_.app_name
@@ -1070,7 +1130,7 @@ class CronTabberBase(RequiredConfig):
                 repr(exc_type),
                 repr(exc_value),
                 exc_traceback
-            )
+            ),
         )
 
     def check_dependencies(self, class_):
@@ -1119,6 +1179,8 @@ class CronTabberBase(RequiredConfig):
                 # no past information, run now
                 return True
         next_run = info['next_run']
+
+        # if not info['ongoing'] and next_run < utc_now():
         if next_run < utc_now():
             return True
         return False
