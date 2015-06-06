@@ -25,6 +25,7 @@ from crontabber.mixins import (
     with_postgres_connection_as_argument,
     as_single_postgres_transaction
 )
+from crontabber.dbapi2_util import execute_no_results
 
 from .base import IntegrationTestCaseBase
 
@@ -2158,6 +2159,10 @@ class TestCrontabber(IntegrationTestCaseBase):
         def runner(manager):
             with manager.context() as config:
                 tab = app.CronTabber(config)
+                tab.transaction_executor(
+                    execute_no_results,
+                    'TRUNCATE crontabber_log CASCADE'
+                )
                 assert tab.main() == 0
 
         threads = [
@@ -2197,6 +2202,10 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
         with config_manager.context() as config:
             tab = app.CronTabber(config)
+            tab.transaction_executor(
+                execute_no_results,
+                'TRUNCATE crontabber_log CASCADE'
+            )
             assert tab.main() == 0
 
         state = tab.job_state_database['slow-job']
@@ -2254,7 +2263,11 @@ class TestCrontabber(IntegrationTestCaseBase):
         )
         with config_manager1.context() as config:
             tab = app.CronTabber(config)
-            assert tab.main() == 0
+            tab.transaction_executor(
+                execute_no_results,
+                'TRUNCATE crontabber_log CASCADE'
+            )
+             assert tab.main() == 0
 
         config_manager2 = self._setup_config_manager(
             'crontabber.tests.test_crontabber.SlowAlsoJob|1h\n'
