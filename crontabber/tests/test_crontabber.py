@@ -2267,7 +2267,7 @@ class TestCrontabber(IntegrationTestCaseBase):
                 execute_no_results,
                 'TRUNCATE crontabber_log CASCADE'
             )
-             assert tab.main() == 0
+            assert tab.main() == 0
 
         config_manager2 = self._setup_config_manager(
             'crontabber.tests.test_crontabber.SlowAlsoJob|1h\n'
