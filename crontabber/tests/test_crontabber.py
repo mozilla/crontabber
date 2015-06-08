@@ -2204,6 +2204,11 @@ class TestCrontabber(IntegrationTestCaseBase):
         eq_(len(logs['slow-job']), 2)
         first, second = logs['slow-job']
         # only one should be successful, the other fail
+        from pprint import pprint
+        print "FIRST"
+        pprint(first)
+        print "SECOND"
+        pprint(second)
         ok_(first['exc_value'] or second['exc_value'])
         ok_(first['exc_value'] != second['exc_value'])
         error_class_name = app.DuplicateAppInsertError.__name__
@@ -2257,6 +2262,11 @@ class TestCrontabber(IntegrationTestCaseBase):
         logs = self._load_logs()
         first, second, third = logs['slow-job']
         ok_(first['success'])
+        from pprint import pprint
+        print "SECOND"
+        pprint(second)
+        print "THIRD"
+        pprint(third)
         # one of those should have been successful the other not
         ok_(second['success'] or third['success'])
         # the python way of doing an XOR
