@@ -16,7 +16,7 @@ import time
 import traceback
 from functools import partial
 
-from psycopg2 import OperationalError, IntegrityError, ProgrammingError
+from psycopg2 import OperationalError, IntegrityError
 
 from dbapi2_util import (
     single_value_sql,
@@ -203,14 +203,16 @@ class JobStateDatabase(RequiredConfig):
                     "WITH TIME ZONE"
                 )
         # check that we have set the unique index on the app_name
-        try:
+        index_count, = self.transaction_executor(
+            single_row_sql,
+            "SELECT COUNT(1) FROM pg_indexes WHERE "
+            "indexname = 'crontabber_unique_app_name_idx'"
+        )
+        if not index_count:
             self.transaction_executor(
                 execute_no_results,
                 CREATE_CRONTABBER_APP_NAME_UNIQUE_INDEX
             )
-        except ProgrammingError as exception:
-            if 'already exists' not in exception.args[0]:
-                raise
 
         found = self.transaction_executor(
             execute_query_fetchall,
@@ -335,6 +337,10 @@ class JobStateDatabase(RequiredConfig):
                     return repr(obj)
                 return json.JSONEncoder.default(self, obj)
 
+        print "__SETITEM__", id(self), time.time()
+        from pprint import pprint
+        pprint(value)
+        #print ""
         try:
             single_value_sql(
                 connection,
@@ -362,6 +368,7 @@ class JobStateDatabase(RequiredConfig):
                     app_name = %(app_name)s
             """
         except OperationalError as exception:
+            # raise
             if 'could not obtain lock' in exception.args[0]:
                 raise RowLevelLockError(exception.args[0])
             else:
@@ -405,6 +412,9 @@ class JobStateDatabase(RequiredConfig):
             ),
             'ongoing': value.get('ongoing'),
         }
+        # print "SETITEM"
+        # print "NEXT_SQL"
+        # print next_sql
         try:
             execute_no_results(
                 connection,

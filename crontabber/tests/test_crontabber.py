@@ -2231,6 +2231,12 @@ class TestCrontabber(IntegrationTestCaseBase):
 
         logs = self._load_logs()
         eq_(len(logs['slow-job']), 1)
+        # print '_____ignore everything above_________________________________'
+        # from crontabber.dbapi2_util import execute_no_results
+        # tab.transaction_executor(
+        #     execute_no_results,
+        #     "SELECT '------------ignore everything above-------------------'"
+        # )
 
         def runner(manager):
             with manager.context() as config:
@@ -2262,15 +2268,15 @@ class TestCrontabber(IntegrationTestCaseBase):
         logs = self._load_logs()
         first, second, third = logs['slow-job']
         ok_(first['success'])
-        from pprint import pprint
-        print "SECOND"
-        pprint(second)
-        print "THIRD"
-        pprint(third)
+        # from pprint import pprint
+        # print "SECOND"
+        # pprint(second)
+        # print "THIRD"
+        # pprint(third)
         # one of those should have been successful the other not
         ok_(second['success'] or third['success'])
         # the python way of doing an XOR
-        ok_(second['success'] != third['success'])
+        ok_(bool(second['success']) != bool(third['success']))
         error_class_name = app.RowLevelLockError.__name__
         ok_(
             (second['exc_value'] or '').startswith(error_class_name) or
@@ -2400,7 +2406,7 @@ class SlowJob(_Job):
 
     def run(self):
         # in some tests this time.sleep gets mocked out
-        time.sleep(.2)
+        time.sleep(.3)
         super(SlowJob, self).run()
 
 
