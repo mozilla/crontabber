@@ -131,17 +131,6 @@ class RowLevelLockError(OperationalError):
     pass
 
 
-class DuplicateAppInsertError(IntegrityError):
-    """The reason for defining this class is similar to the reasoning
-    of the RowLevelLockError exception class.
-    When two simultaneous attempts are made at inserting the same
-    app_name into the crontabber state, we get an IntegrityError
-    because there's a uniqueness index on that column.
-    By re-defining the error under a different "name" it becomes more
-    clear, when looking at the logs, what went wrong.
-    """
-    pass
-
 _marker = object()
 
 
@@ -337,14 +326,13 @@ class JobStateDatabase(RequiredConfig):
                     return repr(obj)
                 return json.JSONEncoder.default(self, obj)
 
-        print "__SETITEM__", id(self), time.time()
-        from pprint import pprint
-        pprint(value)
-        #print ""
+        # print "__SETITEM__", id(self), time.time(), (key, value)
+        # from pprint import pprint
+        # pprint(value)
         try:
-            single_value_sql(
+            ongoing = single_value_sql(
                 connection,
-                """SELECT app_name
+                """SELECT ongoing
                 FROM crontabber
                 WHERE
                     app_name = %s
@@ -352,6 +340,12 @@ class JobStateDatabase(RequiredConfig):
                 """,
                 (key,)
             )
+            if value['ongoing'] and ongoing:
+                # You're trying to set that this job should be ongoing
+                # but according to the state it's already ongoing.
+                # This is the high-level version of row-locking that
+                # doesn't use low-level postgresql locking primitives.
+                raise RowLevelLockError(ongoing)
             # the key exists, do an update
             next_sql = """
                 UPDATE crontabber
@@ -368,8 +362,9 @@ class JobStateDatabase(RequiredConfig):
                     app_name = %(app_name)s
             """
         except OperationalError as exception:
-            # raise
-            if 'could not obtain lock' in exception.args[0]:
+            if isinstance(exception.args[0], datetime.datetime):
+                raise RowLevelLockError('actively ongoing')
+            elif 'could not obtain lock' in exception.args[0]:
                 raise RowLevelLockError(exception.args[0])
             else:
                 raise
@@ -425,7 +420,7 @@ class JobStateDatabase(RequiredConfig):
             # See CREATE_CRONTABBER_APP_NAME_UNIQUE_INDEX for why
             # we know to look for this mentioned in the error message.
             if 'crontabber_unique_app_name_idx' in exception.args[0]:
-                raise DuplicateAppInsertError(exception.args[0])
+                raise RowLevelLockError(exception.args[0])
             raise
 
     @database_transaction()
@@ -1201,7 +1196,17 @@ class CronTabberBase(RequiredConfig):
                 return True
         next_run = info['next_run']
 
-        # if not info['ongoing'] and next_run < utc_now():
+        if not next_run:
+            # It has never run before.
+            # If it has an active ongoing status it means two
+            # independent threads tried to start it. The second one
+            # (by a tiny time margin) will have a job_class whose
+            # `ongoing` value has already been set.
+            # If that's the case, let it through because it will
+            # commence and break due to RowLevelLockError in the
+            # state's __setitem__ method.
+            return bool(info['ongoing'])
+
         if next_run < utc_now():
             return True
         return False

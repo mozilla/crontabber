@@ -345,6 +345,7 @@ class TestCrontabber(IntegrationTestCaseBase):
           id serial primary key,
           time timestamp DEFAULT current_timestamp
         );
+        TRUNCATE crontabber, crontabber_log;
         """)
         self.conn.commit()
 
@@ -2204,14 +2205,14 @@ class TestCrontabber(IntegrationTestCaseBase):
         eq_(len(logs['slow-job']), 2)
         first, second = logs['slow-job']
         # only one should be successful, the other fail
-        from pprint import pprint
-        print "FIRST"
-        pprint(first)
-        print "SECOND"
-        pprint(second)
+        # from pprint import pprint
+        # print "FIRST"
+        # pprint(first)
+        # print "SECOND"
+        # pprint(second)
         ok_(first['exc_value'] or second['exc_value'])
         ok_(first['exc_value'] != second['exc_value'])
-        error_class_name = app.DuplicateAppInsertError.__name__
+        error_class_name = app.RowLevelLockError.__name__
         ok_(
             (first['exc_value'] or '').startswith(error_class_name) or
             (second['exc_value'] or '').startswith(error_class_name)
