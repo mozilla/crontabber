@@ -326,9 +326,6 @@ class JobStateDatabase(RequiredConfig):
                     return repr(obj)
                 return json.JSONEncoder.default(self, obj)
 
-        # print "__SETITEM__", id(self), time.time(), (key, value)
-        # from pprint import pprint
-        # pprint(value)
         try:
             ongoing = single_value_sql(
                 connection,
