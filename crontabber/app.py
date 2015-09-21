@@ -38,7 +38,7 @@ from base import (
 
 try:
     import raven
-except ImportError:
+except ImportError:  # pragma: no cover
     raven = None
 
 from configman import Namespace, RequiredConfig
@@ -218,13 +218,10 @@ class JobStateDatabase(RequiredConfig):
             )
 
     def has_data(self):
-        try:
-            return bool(self.transaction_executor(
-                single_value_sql,
-                "SELECT COUNT(*) FROM crontabber"
-            ))
-        except SQLDidNotReturnSingleValue:
-            return False
+        return bool(self.transaction_executor(
+            single_value_sql,
+            "SELECT COUNT(*) FROM crontabber"
+        ))
 
     def __iter__(self):
         return iter([
@@ -278,8 +275,6 @@ class JobStateDatabase(RequiredConfig):
         items = []
         for record in self.transaction_executor(execute_query_fetchall, sql):
             row = dict(zip(columns, record))
-            if isinstance(row['last_error'], basestring):
-                row['last_error'] = json.loads(row['last_error'])
             items.append((row.pop('app_name'), row))
         return items
 
@@ -314,8 +309,6 @@ class JobStateDatabase(RequiredConfig):
         except SQLDidNotReturnSingleRow:
             raise KeyError(key)
         row = dict(zip(columns, record))
-        if isinstance(row['last_error'], basestring):
-            row['last_error'] = json.loads(row['last_error'])
         return row
 
     @database_transaction()
@@ -404,9 +397,6 @@ class JobStateDatabase(RequiredConfig):
             ),
             'ongoing': value.get('ongoing'),
         }
-        # print "SETITEM"
-        # print "NEXT_SQL"
-        # print next_sql
         try:
             execute_no_results(
                 connection,
@@ -442,8 +432,6 @@ class JobStateDatabase(RequiredConfig):
         all = {}
         for record in execute_query_iter(connection, sql):
             row = dict(zip(columns, record))
-            if isinstance(row['last_error'], basestring):
-                row['last_error'] = json.loads(row['last_error'])
             all[row.pop('app_name')] = row
         return all
 
@@ -498,15 +486,15 @@ class JobStateDatabase(RequiredConfig):
 
 
 # -----------------------------------------------------------------------------
-def _default_list_splitter(class_list_str):
+def _default_list_splitter(class_list_str):  # pragma: no cover
     return [x.strip() for x in class_list_str.split(',')]
 
 
-def _default_class_extractor(list_element):
+def _default_class_extractor(list_element):  # pragma: no cover
     return list_element
 
 
-def _default_extra_extractor(list_element):
+def _default_extra_extractor(list_element):  # pragma: no cover
     raise NotImplementedError()
 
 

@@ -259,6 +259,23 @@ class TestStateDatabase(IntegrationTestCaseBase):
         ok_(foo in values)
         ok_(bar in values)
 
+    def test_iterate_values_with_error(self):
+        foo = {
+            'next_run': utc_now(),
+            'last_run': utc_now(),
+            'first_run': utc_now(),
+            'last_success': utc_now(),
+            'depends_on': [],
+            'error_count': 0,
+            'last_error': {
+                'key': 'Value',
+                'number': 10
+            }
+        }
+        self.database['foo'] = foo
+        foo_returned, = self.database.values()
+        eq_(foo_returned['last_error'], foo['last_error'])
+
     def test_contains(self):
         ok_('foo' not in self.database)
         self.database['foo'] = {
@@ -353,6 +370,11 @@ class TestStateDatabase(IntegrationTestCaseBase):
         popped = self.database.pop('foo', 'default')
         eq_(popped, 'default')
         assert_raises(KeyError, self.database.pop, 'bar')
+        try:
+            del self.database['bar']
+            assert False, "it should have raise a KeyError on del"
+        except KeyError:
+            pass
 
 
 @attr(integration='postgres')
