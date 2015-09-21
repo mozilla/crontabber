@@ -150,6 +150,28 @@ class TestStateDatabase(IntegrationTestCaseBase):
         super(TestStateDatabase, self).setUp()
         self.database = app.JobStateDatabase(self.config.crontabber)
 
+    def test_recreate_state_log_and_index(self):
+        self.conn.cursor().execute("""
+            DROP TABLE crontabber_log;
+            DROP TABLE crontabber;
+        """)
+        self.conn.commit()
+        app.JobStateDatabase(self.config.crontabber)
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT relname FROM pg_class
+            WHERE relname IN ('crontabber', 'crontabber_log')
+        """)
+        names = [row[0] for row in cursor.fetchall()]
+        eq_(sorted(names), ['crontabber', 'crontabber_log'])
+        # there should also be an index
+        cursor.execute("""
+            SELECT indexname FROM pg_indexes
+            WHERE indexname = 'crontabber_unique_app_name_idx'
+        """)
+        names = [row[0] for row in cursor.fetchall()]
+        eq_(names, ['crontabber_unique_app_name_idx'])
+
     def test_has_data(self):
         ok_(not self.database.has_data())
         self.database['foo'] = {
