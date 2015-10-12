@@ -795,6 +795,10 @@ class TestCrontabber(IntegrationTestCaseBase):
             # twice per not found
             eq_(output.count('FrequencyDefinitionError'), 2)
             ok_('Error value: e' in output)
+            config.logger.critical.assert_called_with(
+                'Failed to config test a job',
+                exc_info=True
+            )
 
     def test_configtest_bad_time(self):
         config_manager = self._setup_config_manager(

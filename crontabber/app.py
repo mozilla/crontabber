@@ -1229,6 +1229,10 @@ class CronTabberBase(RequiredConfig):
                 JobDescriptionError,
                 FrequencyDefinitionError,
                 TimeDefinitionError):
+            config.logger.critical(
+                'Failed to config test a job',
+                exc_info=True
+            )
             exc_type, exc_value, exc_tb = sys.exc_info()
             print >>sys.stderr, "Error type:", exc_type
             print >>sys.stderr, "Error value:", exc_value
