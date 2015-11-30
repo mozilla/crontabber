@@ -1233,10 +1233,6 @@ class CronTabberBase(RequiredConfig):
                 'Failed to config test a job',
                 exc_info=True
             )
-            exc_type, exc_value, exc_tb = sys.exc_info()
-            print >>sys.stderr, "Error type:", exc_type
-            print >>sys.stderr, "Error value:", exc_value
-            print >>sys.stderr, ''.join(traceback.format_tb(exc_tb))
             return False
 
     def audit_ghosts(self):
