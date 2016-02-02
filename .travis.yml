@@ -20,8 +20,9 @@ addons:
     postgresql: "9.2"
 
 before_install:
-    - pip install -r test-requirements.txt
+    - travis_retry pip install -r test-requirements.txt
     - psql -c 'create database travis_ci_test;' -U postgres
+    - travis_retry pip install twine
 
 install:
     - python setup.py install
@@ -35,7 +36,7 @@ notifications:
 
 after_success:
     # Report coverage results to coveralls.io
-    - pip install coveralls --use-mirrors
+    - travis_retry pip install coveralls
     - coveralls
 
 deploy:
