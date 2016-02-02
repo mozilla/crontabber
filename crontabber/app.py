@@ -106,6 +106,10 @@ class BrokenJSONError(ValueError):
     pass
 
 
+class SentryConfigurationError(Exception):
+    """When Sentry isn't configured correctly"""
+
+
 _marker = object()
 
 
@@ -694,6 +698,14 @@ class CronTabberBase(RequiredConfig):
     )
 
     required_config.add_option(
+        name='sentrytest',
+        default=False,
+        doc='Send a sample raven exception',
+        exclude_from_print_conf=True,
+        exclude_from_dump_conf=True,
+    )
+
+    required_config.add_option(
         name='audit-ghosts',
         default=False,
         doc='Checks if there jobs in the database that is not configured.',
@@ -764,10 +776,9 @@ class CronTabberBase(RequiredConfig):
             self.audit_ghosts()
             return 0
         elif self.config.get('configtest'):
-            if not self.configtest():
-                return 1
-            else:
-                return 0
+            return not self.configtest() and 1 or 0
+        elif self.config.get('sentrytest'):
+            return not self.sentrytest() and 1 or 0
         if self.config.get('job'):
             self.run_one(self.config['job'], self.config.get('force'))
         else:
@@ -1234,6 +1245,31 @@ class CronTabberBase(RequiredConfig):
                 exc_info=True
             )
             return False
+
+    def sentrytest(self):
+        """return true if we managed to send a sample raven exception"""
+        if not (self.config.sentry and self.config.sentry.dsn):
+            raise SentryConfigurationError('sentry dsn not configured')
+
+        try:
+            version = raven.fetch_package_version('crontabber')
+        except Exception:
+            version = None
+            self.config.logger.warning(
+                'Unable to extract version of crontabber',
+                exc_info=True
+            )
+        client = raven.Client(
+            dsn=self.config.sentry.dsn,
+            release=version
+        )
+        identifier = client.captureMessage(
+            'Sentry test sent from crontabber'
+        )
+        self.config.logger.info(
+            'Sentry successful identifier: %s', identifier
+        )
+        return True
 
     def audit_ghosts(self):
         """compare the list of configured jobs with the jobs in the state"""
