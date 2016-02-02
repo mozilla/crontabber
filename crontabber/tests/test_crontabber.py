@@ -15,6 +15,8 @@ import psycopg2
 from nose.plugins.attrib import attr
 from nose.tools import eq_, ok_, assert_raises
 
+from configman.dotdict import DotDict
+
 from crontabber import app, base, __version__
 from crontabber.datetimeutil import utc_now
 from configman import Namespace
@@ -735,6 +737,52 @@ class TestCrontabber(IntegrationTestCaseBase):
             eq_(outputs['trouble'].count('Trouble!!'), 2)
             ok_(re.findall('7d @ 03:00',
                            outputs['basic-job'], re.I))
+
+    @mock.patch('crontabber.app.raven')
+    def test_sentrytest(self, raven_mocked):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.FooJob|3d\n'
+            'crontabber.tests.test_crontabber.BarJob|4d'
+        )
+
+        def fake_fetch_package(*args, **kwargs):
+            raise Exception('any error')
+
+        raven_mocked.fetch_package_version.side_effect = fake_fetch_package
+
+        mocked_messages = []
+
+        def mock_captureMessage(msg):
+            mocked_messages.append(msg)
+            return '123456789'
+
+        mocked_client = mock.MagicMock()
+        mocked_client.captureMessage.side_effect = mock_captureMessage
+
+        def mock_client(dsn, release):
+            assert not release
+            return mocked_client
+
+        raven_mocked.Client.side_effect = mock_client
+
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            config['sentrytest'] = True
+            assert_raises(
+                app.SentryConfigurationError,
+                tab.main
+            )
+
+            config['sentry'] = DotDict({'dsn': 'somedsn'})
+            assert tab.main() == 0
+
+            mocked_client.captureMessage.assert_called_with(
+                mocked_messages[0]
+            )
+
+            tab.config.logger.info.assert_called_with(
+                'Sentry successful identifier: %s', '123456789'
+            )
 
     def test_configtest_ok(self):
         config_manager = self._setup_config_manager(
