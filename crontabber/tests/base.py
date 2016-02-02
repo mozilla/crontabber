@@ -11,15 +11,14 @@ import unittest
 from collections import Sequence, Mapping, defaultdict
 
 import mock
-import psycopg2
 from nose.plugins.attrib import attr
 from nose.tools import eq_
 
 import configman
-from configman.dotdict import DotDictWithAcquisition
 
 from crontabber import app
 from crontabber.generic_app import environment
+
 
 class TestCaseBase(unittest.TestCase):
 
@@ -135,7 +134,7 @@ class IntegrationTestCaseBase(TestCaseBase):
             tz, = cursor.fetchone()
             if tz != 'UTC':
                 cursor.execute("""
-                   ALTER DATABASE %(database_name)s SET TIMEZONE TO UTC;
+                   ALTER DATABASE %(dbname)s SET TIMEZONE TO UTC;
                 """ % self.config.crontabber)
             failed = False
         finally:
