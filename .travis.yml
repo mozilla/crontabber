@@ -35,6 +35,8 @@ notifications:
         channels: "irc.mozilla.org#breakpad"
 
 after_success:
+    # so that builds can be made with a reStructuredText README
+    - travis_retry pip install pypandoc
     # Report coverage results to coveralls.io
     - travis_retry pip install coveralls
     - coveralls
