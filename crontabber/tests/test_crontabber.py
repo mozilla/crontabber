@@ -783,18 +783,7 @@ class TestCrontabber(IntegrationTestCaseBase):
 
         with config_manager.context() as config:
             tab = app.CronTabber(config)
-            old_stderr = sys.stderr
-            new_stderr = StringIO()
-            sys.stderr = new_stderr
-            try:
-                ok_(not tab.configtest())
-            finally:
-                sys.stderr = old_stderr
-            output = new_stderr.getvalue()
-            ok_('FrequencyDefinitionError' in output)
-            # twice per not found
-            eq_(output.count('FrequencyDefinitionError'), 2)
-            ok_('Error value: e' in output)
+            ok_(not tab.configtest())
             config.logger.critical.assert_called_with(
                 'Failed to config test a job',
                 exc_info=True
@@ -808,18 +797,11 @@ class TestCrontabber(IntegrationTestCaseBase):
 
         with config_manager.context() as config:
             tab = app.CronTabber(config)
-            old_stderr = sys.stderr
-            new_stderr = StringIO()
-            sys.stderr = new_stderr
-            try:
-                ok_(not tab.configtest())
-            finally:
-                sys.stderr = old_stderr
-            output = new_stderr.getvalue()
-            ok_('TimeDefinitionError' in output)
-            # twice per not found
-            eq_(output.count('TimeDefinitionError'), 2 + 2)
-            ok_('24:59' in output)
+            ok_(not tab.configtest())
+            config.logger.critical.assert_called_with(
+                'Failed to config test a job',
+                exc_info=True
+            )
 
     def test_configtest_bad_time_invariance(self):
         config_manager = self._setup_config_manager(
@@ -828,18 +810,11 @@ class TestCrontabber(IntegrationTestCaseBase):
 
         with config_manager.context() as config:
             tab = app.CronTabber(config)
-            old_stderr = sys.stderr
-            new_stderr = StringIO()
-            sys.stderr = new_stderr
-            try:
-                ok_(not tab.configtest())
-            finally:
-                sys.stderr = old_stderr
-            output = new_stderr.getvalue()
-            ok_('FrequencyDefinitionError' in output)
-            # twice per not found
-            ok_(output.count('FrequencyDefinitionError'))
-            ok_('23:59' in output)
+            ok_(not tab.configtest())
+            config.logger.critical.assert_called_with(
+                'Failed to config test a job',
+                exc_info=True
+            )
 
     def test_audit_ghosts_nothing(self):
         config_manager = self._setup_config_manager(
