@@ -1229,10 +1229,10 @@ class CronTabberBase(RequiredConfig):
                 JobDescriptionError,
                 FrequencyDefinitionError,
                 TimeDefinitionError):
-            exc_type, exc_value, exc_tb = sys.exc_info()
-            print >>sys.stderr, "Error type:", exc_type
-            print >>sys.stderr, "Error value:", exc_value
-            print >>sys.stderr, ''.join(traceback.format_tb(exc_tb))
+            config.logger.critical(
+                'Failed to config test a job',
+                exc_info=True
+            )
             return False
 
     def audit_ghosts(self):
