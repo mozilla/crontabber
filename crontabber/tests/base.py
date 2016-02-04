@@ -25,12 +25,14 @@ class TestCaseBase(unittest.TestCase):
     def shortDescription(self):
         return None
 
-    def setUp(self):
-        self.tempdir = tempfile.mkdtemp()
+    @classmethod
+    def setUpClass(cls):
+        cls.tempdir = tempfile.mkdtemp()
 
-    def tearDown(self):
-        if os.path.isdir(self.tempdir):
-            shutil.rmtree(self.tempdir)
+    @classmethod
+    def tearDownClass(cls):
+        if os.path.isdir(cls.tempdir):
+            shutil.rmtree(cls.tempdir)
 
     def _setup_config_manager(self, jobs_string, extra_value_source=None):
         """setup and return a configman.ConfigurationManager and a the
@@ -102,9 +104,10 @@ class IntegrationTestCaseBase(TestCaseBase):
     makes sure the `crontabber` table is emptied.
     """
 
-    def get_standard_config(self):
+    @classmethod
+    def get_standard_config(cls):
         config_manager = configman.ConfigurationManager(
-            # [self.required_config],
+            # [cls.required_config],
             [app.CronTabber.get_required_config(),
              app.JobStateDatabase.get_required_config()],
             values_source_list=[
@@ -119,15 +122,16 @@ class IntegrationTestCaseBase(TestCaseBase):
         config.crontabber.logger = mock.Mock()
         return config
 
-    def setUp(self):
-        super(IntegrationTestCaseBase, self).setUp()
-        self.config = self.get_standard_config()
+    @classmethod
+    def setUpClass(cls):
+        super(IntegrationTestCaseBase, cls).setUpClass()
+        cls.config = cls.get_standard_config()
 
-        db_connection_factory = self.config.crontabber.database_class(
-            self.config.crontabber
+        db_connection_factory = cls.config.crontabber.database_class(
+            cls.config.crontabber
         )
-        self.conn = db_connection_factory.connection()
-        cursor = self.conn.cursor()
+        cls.conn = db_connection_factory.connection()
+        cursor = cls.conn.cursor()
         cursor.execute('SHOW timezone;')
         try:
             failed = True
@@ -135,13 +139,13 @@ class IntegrationTestCaseBase(TestCaseBase):
             if tz != 'UTC':
                 cursor.execute("""
                    ALTER DATABASE %(dbname)s SET TIMEZONE TO UTC;
-                """ % self.config.crontabber)
+                """ % cls.config.crontabber)
             failed = False
         finally:
-            failed and self.conn.rollback() or self.conn.commit()
+            failed and cls.conn.rollback() or cls.conn.commit()
 
         # instanciate one of these to make sure the tables are created
-        app.JobStateDatabase(self.config.crontabber)
+        app.JobStateDatabase(cls.config.crontabber)
 
     def _truncate(self):
         self.conn.cursor().execute("""
@@ -152,7 +156,11 @@ class IntegrationTestCaseBase(TestCaseBase):
     def tearDown(self):
         super(IntegrationTestCaseBase, self).tearDown()
         self._truncate()
-        self.conn.close()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        super(IntegrationTestCaseBase, cls).tearDownClass()
 
     def assertAlmostEqual(self, val1, val2):
         if (
