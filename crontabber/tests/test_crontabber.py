@@ -370,11 +370,8 @@ class TestStateDatabase(IntegrationTestCaseBase):
         popped = self.database.pop('foo', 'default')
         eq_(popped, 'default')
         assert_raises(KeyError, self.database.pop, 'bar')
-        try:
+        with assert_raises(KeyError):
             del self.database['bar']
-            assert False, "it should have raise a KeyError on del"
-        except KeyError:
-            pass
 
 
 @attr(integration='postgres')
