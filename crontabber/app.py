@@ -131,6 +131,13 @@ class RowLevelLockError(OperationalError):
     pass
 
 
+class OngoingJobError(Exception):
+    """Raised when you basically tried to run a job that already
+    ongoing. This is the "high level" version of `RowLevelLockError`.
+    """
+    pass
+
+
 _marker = object()
 
 
@@ -320,7 +327,7 @@ class JobStateDatabase(RequiredConfig):
                 return json.JSONEncoder.default(self, obj)
 
         try:
-            ongoing = single_value_sql(
+            single_value_sql(
                 connection,
                 """SELECT ongoing
                 FROM crontabber
@@ -330,13 +337,10 @@ class JobStateDatabase(RequiredConfig):
                 """,
                 (key,)
             )
-            if value['ongoing'] and ongoing:
-                # You're trying to set that this job should be ongoing
-                # but according to the state it's already ongoing.
-                # This is the high-level version of row-locking that
-                # doesn't use low-level postgresql locking primitives.
-                raise RowLevelLockError(ongoing)
-            # the key exists, do an update
+            # If the above single_value_sql() didn't raise a
+            # SQLDidNotReturnSingleValue exception, it means
+            # there is a row by this app_name.
+            # Therefore, the next SQL is an update.
             next_sql = """
                 UPDATE crontabber
                 SET
@@ -352,9 +356,7 @@ class JobStateDatabase(RequiredConfig):
                     app_name = %(app_name)s
             """
         except OperationalError as exception:
-            if isinstance(exception.args[0], datetime.datetime):
-                raise RowLevelLockError('actively ongoing')
-            elif 'could not obtain lock' in exception.args[0]:
+            if 'could not obtain lock' in exception.args[0]:
                 raise RowLevelLockError(exception.args[0])
             else:
                 raise
@@ -691,6 +693,15 @@ class CronTabberBase(RequiredConfig):
         doc='number of seconds to re-attempt a job that failed'
     )
 
+    required_config.crontabber.add_option(
+        'max_ongoing_age_hours',
+        default=12.0,
+        doc=(
+            'If a job has been ongoing for longer than this, it gets '
+            'ignored as a lock and the job is run anyway.'
+        )
+    )
+
     # for local use, independent of the JSONAndPostgresJobDatabase
     required_config.crontabber.add_option(
         'database_class',
@@ -826,7 +837,18 @@ class CronTabberBase(RequiredConfig):
         if self.config.get('job'):
             self.run_one(self.config['job'], self.config.get('force'))
         else:
-            self.run_all()
+            try:
+                self.run_all()
+            except RowLevelLockError:
+                self.config.logger.debug(
+                    'Next job to work on is already ongoing'
+                )
+                return 2
+            except OngoingJobError:
+                self.config.logger.debug(
+                    'Next job to work on is already ongoing'
+                )
+                return 3
         return 0
 
     @staticmethod
@@ -1025,6 +1047,7 @@ class CronTabberBase(RequiredConfig):
 
         last_success = None
         now = utc_now()
+        log_run = True
         try:
             t0 = time.time()
             for last_success in self._run_job(job_class, config, info):
@@ -1036,6 +1059,11 @@ class CronTabberBase(RequiredConfig):
                 # 't0' for the next loop if there is one.
                 t0 = time.time()
             exc_type = exc_value = exc_tb = None
+        except (OngoingJobError, RowLevelLockError):
+            # It's not an actual runtime error. It just basically means
+            # you can't start crontabber right now.
+            log_run = False
+            raise
         except:
             t1 = time.time()
             exc_type, exc_value, exc_tb = sys.exc_info()
@@ -1043,7 +1071,7 @@ class CronTabberBase(RequiredConfig):
             # when debugging tests that mock logging, uncomment this otherwise
             # the exc_info=True doesn't compute and record what the exception
             # was
-            #raise
+            #raise  # noqa
 
             if self.config.sentry and self.config.sentry.dsn:
                 assert raven, "raven not installed"
@@ -1072,8 +1100,15 @@ class CronTabberBase(RequiredConfig):
             )
 
         finally:
-            self._log_run(job_class, seconds, time_, last_success, now,
-                          exc_type, exc_value, exc_tb)
+            if log_run:
+                self._log_run(
+                    job_class,
+                    seconds,
+                    time_,
+                    last_success,
+                    now,
+                    exc_type, exc_value, exc_tb
+                )
 
     @database_transaction()
     def _remember_success(
@@ -1207,7 +1242,21 @@ class CronTabberBase(RequiredConfig):
         app_name = class_.app_name
         info = self.job_state_database.get(app_name)
         if info:
-            info['ongoing'] = datetime.datetime.utcnow()
+            # Was it already ongoing?
+            if info.get('ongoing'):
+                # Unless it's been ongoing for ages, raise OngoingJobError
+                age_hours = (utc_now() - info['ongoing']).seconds / 3600.0
+                if age_hours < self.config.crontabber.max_ongoing_age_hours:
+                    raise OngoingJobError(info['ongoing'])
+                else:
+                    self.config.logger.debug(
+                        '{} has been ongoing for {:2} hours. '
+                        'Ignore it and running the app anyway.'.format(
+                            app_name,
+                            age_hours,
+                        )
+                    )
+            info['ongoing'] = utc_now()
         else:
             depends_on = getattr(class_, 'depends_on', [])
             if isinstance(depends_on, basestring):
@@ -1222,7 +1271,7 @@ class CronTabberBase(RequiredConfig):
                 'last_error': {},
                 'error_count': 0,
                 'depends_on': depends_on,
-                'ongoing': datetime.datetime.utcnow()
+                'ongoing': utc_now(),
             }
         self.job_state_database[app_name] = info
 
@@ -1378,6 +1427,12 @@ def local_main():  # pragma: no cover
     if root not in sys.path:
         sys.path.append(root)
     sys.exit(main(CronTabber))
+    # try:
+    #     sys.exit(main(CronTabber))
+    # except RowLevelLockError:
+    #     sys.exit(1)
+    # except OngoingJobError:
+    #     sys.exit(2)
 
 
 if __name__ == '__main__':  # pragma: no cover

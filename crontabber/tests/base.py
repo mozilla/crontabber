@@ -185,7 +185,7 @@ class IntegrationTestCaseBase(TestCaseBase):
                 depends_on,
                 last_error,
                 ongoing
-            FROM crontabber;
+            FROM crontabber
         """)
         columns = (
             'app_name', 'next_run', 'first_run', 'last_run', 'last_success',
@@ -203,6 +203,31 @@ class IntegrationTestCaseBase(TestCaseBase):
         finally:
             self.conn.commit()
         return structure
+
+    def _update_structure(self, app_name, information, **updates):
+        cursor = self.conn.cursor()
+        information.update(updates)
+        execute_vars = dict(
+            information,
+            app_name=app_name,
+            last_error=json.dumps(information['last_error']),
+        )
+        cursor.execute("""
+            UPDATE
+                crontabber
+            SET
+                next_run = %(next_run)s,
+                first_run = %(first_run)s,
+                last_run = %(last_run)s,
+                last_success = %(last_success)s,
+                error_count = %(error_count)s,
+                depends_on = %(depends_on)s,
+                last_error = %(last_error)s,
+                ongoing = %(ongoing)s
+            WHERE
+                app_name = %(app_name)s
+        """, execute_vars)
+        self.conn.commit()
 
     def _load_logs(self):
         cursor = self.conn.cursor()

@@ -2218,10 +2218,12 @@ class TestCrontabber(IntegrationTestCaseBase):
             'crontabber.tests.test_crontabber.SlowJob|1h\n'
         )
 
+        exit_codes = []
+
         def runner(manager):
             with manager.context() as config:
                 tab = app.CronTabber(config)
-                assert tab.main() == 0
+                exit_codes.append(tab.main())
 
         threads = [
             threading.Thread(
@@ -2243,16 +2245,66 @@ class TestCrontabber(IntegrationTestCaseBase):
         ok_(not information['ongoing'])
 
         logs = self._load_logs()
-        eq_(len(logs['slow-job']), 2)
-        first, second = logs['slow-job']
-        # only one should be successful, the other fail
-        ok_(first['exc_value'] or second['exc_value'])
-        ok_(first['exc_value'] != second['exc_value'])
-        error_class_name = app.RowLevelLockError.__name__
-        ok_(
-            (first['exc_value'] or '').startswith(error_class_name) or
-            (second['exc_value'] or '').startswith(error_class_name)
+        eq_(len(logs['slow-job']), 1)
+        first, = logs['slow-job']
+        ok_(first['success'])
+        eq_(len(exit_codes), 2)
+        ok_(0 in exit_codes)
+        assert [x for x in exit_codes if x != 0], exit_codes
+
+    def test_run_two_jobs_almost_simultaneously_first_time(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.SlowJob|1h\n'
         )
+
+        exit_codes = []
+
+        def runner(manager):
+            with manager.context() as config:
+                tab = app.CronTabber(config)
+                exit_codes.append(tab.main())
+
+        def delayed_runner(manager):
+            with manager.context() as config:
+                # Note! The SlowJob app has a delay of 0.3 real seconds.
+                # This job starts 0.1 seconds later than the runner()
+                # above. That means that this runner starts 0.1 seconds
+                # after it has been started and that's more than it takes
+                # to update the state but shorter than the duration
+                # of the SlowJob app.
+                # Therefore we can be certain it will exit with a code of 3.
+                time.sleep(0.1)
+                tab = app.CronTabber(config)
+                exit_code = tab.main()
+                eq_(exit_code, 3)
+                exit_codes.append(exit_code)
+
+        threads = [
+            threading.Thread(
+                target=delayed_runner, args=(config_manager,)
+            ),
+            threading.Thread(
+                target=runner, args=(config_manager,)
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        structure = self._load_structure()
+        information = structure['slow-job']
+        eq_(information['error_count'], 0)
+        eq_(information['last_error'], {})
+        ok_(not information['ongoing'])
+
+        logs = self._load_logs()
+        eq_(len(logs['slow-job']), 1)
+        first, = logs['slow-job']
+        ok_(first['success'])
+        eq_(len(exit_codes), 2)
+        ok_(0 in exit_codes)
+        ok_(3 in exit_codes)
 
     def test_run_two_jobs_simultaneously_second_time(self):
         config_manager = self._setup_config_manager(
@@ -2269,10 +2321,79 @@ class TestCrontabber(IntegrationTestCaseBase):
         logs = self._load_logs()
         eq_(len(logs['slow-job']), 1)
 
+        exit_codes = []
+
         def runner(manager):
             with manager.context() as config:
                 tab = app.CronTabber(config)
-                assert tab.main() == 0
+                exit_codes.append(tab.main())
+
+        def delayed_runner(manager):
+            with manager.context() as config:
+                # Note! The SlowJob app has a delay of 0.3 real seconds.
+                # This job starts 0.1 seconds later than the runner()
+                # above. That means that this runner starts 0.1 seconds
+                # after it has been started and that's more than it takes
+                # to update the state but shorter than the duration
+                # of the SlowJob app.
+                # Therefore we can be certain it will exit with a code of 3.
+                time.sleep(0.1)
+                tab = app.CronTabber(config)
+                exit_code = tab.main()
+                eq_(exit_code, 3)
+                exit_codes.append(exit_code)
+
+        threads = [
+            threading.Thread(
+                target=delayed_runner, args=(config_manager,)
+            ),
+            threading.Thread(
+                target=runner, args=(config_manager,)
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        # let's look now at what was run and shouldn't have run more
+        # than one of them
+
+        structure = self._load_structure()
+        information = structure['slow-job']
+        eq_(information['error_count'], 0)
+        eq_(information['last_error'], {})
+        ok_(not information['ongoing'])
+
+        logs = self._load_logs()
+        first, second = logs['slow-job']
+        ok_(first['success'])
+        # one of those should have been successful the other not
+        ok_(second['success'])
+        assert len(exit_codes) == 2, exit_codes
+        ok_(0 in exit_codes)  # one of them worked
+
+    def test_run_two_jobs_almost_simultaneously_second_time(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.SlowJob|1h\n'
+        )
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            assert tab.main() == 0
+
+        state = tab.job_state_database['slow-job']
+        self._wind_clock(state, hours=1)
+        tab.job_state_database['slow-job'] = state
+
+        logs = self._load_logs()
+        eq_(len(logs['slow-job']), 1)
+
+        exit_codes = []
+
+        def runner(manager):
+            with manager.context() as config:
+                tab = app.CronTabber(config)
+                exit_codes.append(tab.main())
 
         threads = [
             threading.Thread(
@@ -2297,19 +2418,12 @@ class TestCrontabber(IntegrationTestCaseBase):
         ok_(not information['ongoing'])
 
         logs = self._load_logs()
-        first, second, third = logs['slow-job']
+        first, second = logs['slow-job']
         ok_(first['success'])
         # one of those should have been successful the other not
-        ok_(second['success'] or third['success'])
-        # the python way of doing an XOR
-        ok_(bool(second['success']) != bool(third['success']))
-        error_class_name = app.RowLevelLockError.__name__
-        ok_(
-            (second['exc_value'] or '').startswith(error_class_name) or
-            (third['exc_value'] or '').startswith(error_class_name)
-        )
-        # xor the exceptions
-        ok_(second['exc_value'] != third['exc_value'])
+        ok_(second['success'])
+        assert len(exit_codes) == 2, exit_codes
+        ok_(0 in exit_codes)  # one of them worked
 
     def test_run_two_distinct_jobs_simultaneously_second_time(self):
         config_manager1 = self._setup_config_manager(
@@ -2376,6 +2490,95 @@ class TestCrontabber(IntegrationTestCaseBase):
         first, second = logs['slow-also-job']
         ok_(first['success'])
         ok_(second['success'])
+
+    def test_run_job_still_ongoing(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.BasicJob|7d'
+        )
+
+        def fmt(d):
+            return d.split('.')[0]
+
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            assert tab.main() == 0
+
+        structure = self._load_structure()
+        information = structure['basic-job']
+        eq_(information['error_count'], 0)
+        ok_(not information['ongoing'])
+
+        logs = self._load_logs()['basic-job']
+        assert len(logs) == 1, logs
+
+        # Try to run it again
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            exit_code = tab.main()
+            assert exit_code == 0
+
+        # Because it's not time to run yet, no new logs saved
+        logs = self._load_logs()['basic-job']
+        eq_(len(logs), 1)
+
+        # Rewind the 'next_run' so it runs it again
+        structure = self._load_structure()
+        information = structure['basic-job']
+        self._update_structure(
+            'basic-job',
+            information,
+            next_run=utc_now() - datetime.timedelta(seconds=1),
+        )
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            exit_code = tab.main()
+            assert exit_code == 0
+
+        logs = self._load_logs()['basic-job']
+        eq_(len(logs), 2)
+
+        # Clearly it works to fiddle the next_run value.
+        # This time, fiddle both the next_run AND pretend that it's
+        # still ongoing
+        structure = self._load_structure()
+        information = structure['basic-job']
+        self._update_structure(
+            'basic-job',
+            information,
+            next_run=utc_now() - datetime.timedelta(seconds=1),
+            ongoing=utc_now() - datetime.timedelta(seconds=1),
+        )
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            exit_code = tab.main()
+            assert exit_code == 3, exit_code
+
+        logs = self._load_logs()['basic-job']
+        eq_(len(logs), 2)
+
+        # Now, let's pretend that it's been more that X hours since
+        # it started being ongoing. That means it should run again
+        # even though it's ongoing.
+        max_ongoing_age_hours = (
+            app.CronTabber.required_config
+            .crontabber.max_ongoing_age_hours.default
+        )
+        self._update_structure(
+            'basic-job',
+            information,
+            next_run=utc_now() - datetime.timedelta(seconds=1),
+            ongoing=utc_now() - datetime.timedelta(
+                hours=max_ongoing_age_hours,
+                seconds=1
+            ),
+        )
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            exit_code = tab.main()
+            assert exit_code == 0
+
+        logs = self._load_logs()['basic-job']
+        eq_(len(logs), 3)
 
 
 # =============================================================================
