@@ -6,5 +6,9 @@ class FooCronApp(BaseCronApp):
     app_name = 'foo'
 
     def run(self):
+        from time import sleep
+        print "Starting to sleep..."
+        sleep(6)
+        print "Done sleepin."
         with open(self.app_name + '.log', 'a') as f:
             f.write('Now is %s\n' % datetime.datetime.now())

@@ -5,9 +5,10 @@
 import re
 import sys
 import datetime
-import time
 import unittest
 import collections
+import time
+import threading
 from cStringIO import StringIO
 
 import mock
@@ -149,6 +150,28 @@ class TestStateDatabase(IntegrationTestCaseBase):
         super(TestStateDatabase, self).setUp()
         self.database = app.JobStateDatabase(self.config.crontabber)
 
+    def test_recreate_state_log_and_index(self):
+        self.conn.cursor().execute("""
+            DROP TABLE crontabber_log;
+            DROP TABLE crontabber;
+        """)
+        self.conn.commit()
+        app.JobStateDatabase(self.config.crontabber)
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT relname FROM pg_class
+            WHERE relname IN ('crontabber', 'crontabber_log')
+        """)
+        names = [row[0] for row in cursor.fetchall()]
+        eq_(sorted(names), ['crontabber', 'crontabber_log'])
+        # there should also be an index
+        cursor.execute("""
+            SELECT indexname FROM pg_indexes
+            WHERE indexname = 'crontabber_unique_app_name_idx'
+        """)
+        names = [row[0] for row in cursor.fetchall()]
+        eq_(names, ['crontabber_unique_app_name_idx'])
+
     def test_has_data(self):
         ok_(not self.database.has_data())
         self.database['foo'] = {
@@ -235,6 +258,23 @@ class TestStateDatabase(IntegrationTestCaseBase):
         eq_(len(values), 2)
         ok_(foo in values)
         ok_(bar in values)
+
+    def test_iterate_values_with_error(self):
+        foo = {
+            'next_run': utc_now(),
+            'last_run': utc_now(),
+            'first_run': utc_now(),
+            'last_success': utc_now(),
+            'depends_on': [],
+            'error_count': 0,
+            'last_error': {
+                'key': 'Value',
+                'number': 10
+            }
+        }
+        self.database['foo'] = foo
+        foo_returned, = self.database.values()
+        eq_(foo_returned['last_error'], foo['last_error'])
 
     def test_contains(self):
         ok_('foo' not in self.database)
@@ -330,6 +370,8 @@ class TestStateDatabase(IntegrationTestCaseBase):
         popped = self.database.pop('foo', 'default')
         eq_(popped, 'default')
         assert_raises(KeyError, self.database.pop, 'bar')
+        with assert_raises(KeyError):
+            del self.database['bar']
 
 
 @attr(integration='postgres')
@@ -344,6 +386,7 @@ class TestCrontabber(IntegrationTestCaseBase):
           id serial primary key,
           time timestamp DEFAULT current_timestamp
         );
+        TRUNCATE crontabber, crontabber_log;
         """)
         self.conn.commit()
 
@@ -2170,6 +2213,373 @@ class TestCrontabber(IntegrationTestCaseBase):
             ok_('Ran FooJob' in infos, infos)
             ok_('Ran BarJob' in infos, infos)
 
+    def test_run_two_jobs_simultaneously_first_time(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.SlowJob|1h\n'
+        )
+
+        exit_codes = []
+
+        def runner(manager):
+            with manager.context() as config:
+                tab = app.CronTabber(config)
+                exit_codes.append(tab.main())
+
+        threads = [
+            threading.Thread(
+                target=runner, args=(config_manager,)
+            ),
+            threading.Thread(
+                target=runner, args=(config_manager,)
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        structure = self._load_structure()
+        information = structure['slow-job']
+        eq_(information['error_count'], 0)
+        eq_(information['last_error'], {})
+        ok_(not information['ongoing'])
+
+        logs = self._load_logs()
+        eq_(len(logs['slow-job']), 1)
+        first, = logs['slow-job']
+        ok_(first['success'])
+        eq_(len(exit_codes), 2)
+        ok_(0 in exit_codes)
+        assert [x for x in exit_codes if x != 0], exit_codes
+
+    def test_run_two_jobs_almost_simultaneously_first_time(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.SlowJob|1h\n'
+        )
+
+        exit_codes = []
+
+        def runner(manager):
+            with manager.context() as config:
+                tab = app.CronTabber(config)
+                exit_codes.append(tab.main())
+
+        def delayed_runner(manager):
+            with manager.context() as config:
+                # Note! The SlowJob app has a delay of 0.3 real seconds.
+                # This job starts 0.1 seconds later than the runner()
+                # above. That means that this runner starts 0.1 seconds
+                # after it has been started and that's more than it takes
+                # to update the state but shorter than the duration
+                # of the SlowJob app.
+                # Therefore we can be certain it will exit with a code of 3.
+                time.sleep(0.1)
+                tab = app.CronTabber(config)
+                exit_code = tab.main()
+                eq_(exit_code, 3)
+                exit_codes.append(exit_code)
+
+        threads = [
+            threading.Thread(
+                target=delayed_runner, args=(config_manager,)
+            ),
+            threading.Thread(
+                target=runner, args=(config_manager,)
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        structure = self._load_structure()
+        information = structure['slow-job']
+        eq_(information['error_count'], 0)
+        eq_(information['last_error'], {})
+        ok_(not information['ongoing'])
+
+        logs = self._load_logs()
+        eq_(len(logs['slow-job']), 1)
+        first, = logs['slow-job']
+        ok_(first['success'])
+        eq_(len(exit_codes), 2)
+        ok_(0 in exit_codes)
+        ok_(3 in exit_codes)
+
+    def test_run_two_jobs_simultaneously_second_time(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.SlowJob|1h\n'
+        )
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            assert tab.main() == 0
+
+        state = tab.job_state_database['slow-job']
+        self._wind_clock(state, hours=1)
+        tab.job_state_database['slow-job'] = state
+
+        logs = self._load_logs()
+        eq_(len(logs['slow-job']), 1)
+
+        exit_codes = []
+
+        def runner(manager):
+            with manager.context() as config:
+                tab = app.CronTabber(config)
+                exit_codes.append(tab.main())
+
+        def delayed_runner(manager):
+            with manager.context() as config:
+                # Note! The SlowJob app has a delay of 0.3 real seconds.
+                # This job starts 0.1 seconds later than the runner()
+                # above. That means that this runner starts 0.1 seconds
+                # after it has been started and that's more than it takes
+                # to update the state but shorter than the duration
+                # of the SlowJob app.
+                # Therefore we can be certain it will exit with a code of 3.
+                time.sleep(0.1)
+                tab = app.CronTabber(config)
+                exit_code = tab.main()
+                eq_(exit_code, 3)
+                exit_codes.append(exit_code)
+
+        threads = [
+            threading.Thread(
+                target=delayed_runner, args=(config_manager,)
+            ),
+            threading.Thread(
+                target=runner, args=(config_manager,)
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        # let's look now at what was run and shouldn't have run more
+        # than one of them
+
+        structure = self._load_structure()
+        information = structure['slow-job']
+        eq_(information['error_count'], 0)
+        eq_(information['last_error'], {})
+        ok_(not information['ongoing'])
+
+        logs = self._load_logs()
+        first, second = logs['slow-job']
+        ok_(first['success'])
+        # one of those should have been successful the other not
+        ok_(second['success'])
+        assert len(exit_codes) == 2, exit_codes
+        ok_(0 in exit_codes)  # one of them worked
+
+    def test_run_two_jobs_almost_simultaneously_second_time(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.SlowJob|1h\n'
+        )
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            assert tab.main() == 0
+
+        state = tab.job_state_database['slow-job']
+        self._wind_clock(state, hours=1)
+        tab.job_state_database['slow-job'] = state
+
+        logs = self._load_logs()
+        eq_(len(logs['slow-job']), 1)
+
+        exit_codes = []
+
+        def runner(manager):
+            with manager.context() as config:
+                tab = app.CronTabber(config)
+                exit_codes.append(tab.main())
+
+        threads = [
+            threading.Thread(
+                target=runner, args=(config_manager,)
+            ),
+            threading.Thread(
+                target=runner, args=(config_manager,)
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        # let's look now at what was run and shouldn't have run more
+        # than one of them
+
+        structure = self._load_structure()
+        information = structure['slow-job']
+        eq_(information['error_count'], 0)
+        eq_(information['last_error'], {})
+        ok_(not information['ongoing'])
+
+        logs = self._load_logs()
+        first, second = logs['slow-job']
+        ok_(first['success'])
+        # one of those should have been successful the other not
+        ok_(second['success'])
+        assert len(exit_codes) == 2, exit_codes
+        ok_(0 in exit_codes)  # one of them worked
+
+    def test_run_two_distinct_jobs_simultaneously_second_time(self):
+        config_manager1 = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.SlowJob|1h\n'
+        )
+        with config_manager1.context() as config:
+            tab = app.CronTabber(config)
+            assert tab.main() == 0
+
+        config_manager2 = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.SlowAlsoJob|1h\n'
+        )
+        with config_manager2.context() as config:
+            tab = app.CronTabber(config)
+            assert tab.main() == 0
+
+        state = tab.job_state_database['slow-job']
+        self._wind_clock(state, hours=1)
+        tab.job_state_database['slow-job'] = state
+
+        state = tab.job_state_database['slow-also-job']
+        self._wind_clock(state, hours=1)
+        tab.job_state_database['slow-also-job'] = state
+
+        def runner(manager):
+            with manager.context() as config:
+                tab = app.CronTabber(config)
+                assert tab.main() == 0
+
+        threads = [
+            threading.Thread(
+                target=runner, args=(config_manager1,)
+            ),
+            threading.Thread(
+                target=runner, args=(config_manager2,)
+            ),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+
+        # let's look now at what was run and shouldn't have run more
+        # than one of them
+        structure = self._load_structure()
+
+        information = structure['slow-job']
+        eq_(information['error_count'], 0)
+        eq_(information['last_error'], {})
+        ok_(not information['ongoing'])
+
+        information = structure['slow-also-job']
+        eq_(information['error_count'], 0)
+        eq_(information['last_error'], {})
+        ok_(not information['ongoing'])
+
+        logs = self._load_logs()
+        # Both jobs should have succeeded both times even though
+        # they started at the same time.
+        first, second = logs['slow-job']
+        ok_(first['success'])
+        ok_(second['success'])
+
+        first, second = logs['slow-also-job']
+        ok_(first['success'])
+        ok_(second['success'])
+
+    def test_run_job_still_ongoing(self):
+        config_manager = self._setup_config_manager(
+            'crontabber.tests.test_crontabber.BasicJob|7d'
+        )
+
+        def fmt(d):
+            return d.split('.')[0]
+
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            assert tab.main() == 0
+
+        structure = self._load_structure()
+        information = structure['basic-job']
+        eq_(information['error_count'], 0)
+        ok_(not information['ongoing'])
+
+        logs = self._load_logs()['basic-job']
+        assert len(logs) == 1, logs
+
+        # Try to run it again
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            exit_code = tab.main()
+            assert exit_code == 0
+
+        # Because it's not time to run yet, no new logs saved
+        logs = self._load_logs()['basic-job']
+        eq_(len(logs), 1)
+
+        # Rewind the 'next_run' so it runs it again
+        structure = self._load_structure()
+        information = structure['basic-job']
+        self._update_structure(
+            'basic-job',
+            information,
+            next_run=utc_now() - datetime.timedelta(seconds=1),
+        )
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            exit_code = tab.main()
+            assert exit_code == 0
+
+        logs = self._load_logs()['basic-job']
+        eq_(len(logs), 2)
+
+        # Clearly it works to fiddle the next_run value.
+        # This time, fiddle both the next_run AND pretend that it's
+        # still ongoing
+        structure = self._load_structure()
+        information = structure['basic-job']
+        self._update_structure(
+            'basic-job',
+            information,
+            next_run=utc_now() - datetime.timedelta(seconds=1),
+            ongoing=utc_now() - datetime.timedelta(seconds=1),
+        )
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            exit_code = tab.main()
+            assert exit_code == 3, exit_code
+
+        logs = self._load_logs()['basic-job']
+        eq_(len(logs), 2)
+
+        # Now, let's pretend that it's been more that X hours since
+        # it started being ongoing. That means it should run again
+        # even though it's ongoing.
+        max_ongoing_age_hours = (
+            app.CronTabber.required_config
+            .crontabber.max_ongoing_age_hours.default
+        )
+        self._update_structure(
+            'basic-job',
+            information,
+            next_run=utc_now() - datetime.timedelta(seconds=1),
+            ongoing=utc_now() - datetime.timedelta(
+                hours=max_ongoing_age_hours,
+                seconds=1
+            ),
+        )
+        with config_manager.context() as config:
+            tab = app.CronTabber(config)
+            exit_code = tab.main()
+            assert exit_code == 0
+
+        logs = self._load_logs()['basic-job']
+        eq_(len(logs), 3)
+
 
 # =============================================================================
 # Various mock jobs that the tests depend on
@@ -2220,12 +2630,22 @@ class FooBarJob(_Job):
 
 
 class SlowJob(_Job):
-    # an app that takes a whole second to run
+    # an app that takes a long time to run
     app_name = 'slow-job'
 
     def run(self):
-        time.sleep(1)  # time.sleep() is a mock function by the way
+        # in some tests this time.sleep gets mocked out
+        time.sleep(.3)
         super(SlowJob, self).run()
+
+
+class SlowAlsoJob(_Job):
+    # similar to SlowJob but different/independent :)
+    app_name = 'slow-also-job'
+
+    def run(self):
+        time.sleep(0.2)
+        super(SlowAlsoJob, self).run()
 
 
 class TroubleJob(_Job):

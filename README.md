@@ -53,7 +53,7 @@ same command as above.
 
 First you need to install the
 [coverage](http://nedbatchelder.com/code/coverage/) module. Then, with
-`nosetests, you can run this:
+`nosetests`, you can run this:
 
 ```
 PYTHONPATH=. nosetests --with-coverage --cover-erase --cover-html --cover-package=crontabber
@@ -68,3 +68,48 @@ test crontabber to gain a better understanding of how it works.
 The best place to start with is to read the `exampleapp/README.md` file
 and go through its steps. Once you get the basics to work you can start
 experimenting with adding your job classes.
+
+## How locking works
+
+crontabber supports locking. It basically means if you start a second
+instance of crontabber whilst it's already ongoing in another terminal/server
+the second one will exist early. This is only applicable if there is
+an actual job ongoing.
+
+There are two kinds of locking.
+
+1. **General locking.** The first thing crontabber does before it starts
+an app is to ask the state (stored in PostgreSQL) if it's ongoing and if
+it is, it exists with an error code of `3`.
+
+1. **Sub-second locking.** If the general locking (see point above) says
+"No, the job is not ongoing", it's going to proceed to update the state
+with a [row-level locking transaction in PostgreSQL](https://www.postgresql.org/docs/9.5/static/explicit-locking.html#LOCKING-ROWS).
+That basically means PostgreSQL only allows one single `UPDATE` from
+the process that gets there first. The second crontabber process will
+will exit early with an error code of `2` if the first crontabber process
+managed to run the `UPDATE` first.
+
+Imagine two separate terminals starting crontabber at the almost same time:
+
+```
+# Terminal 1
+$ python crontabber.py --admin.conf=crontabber.ini
+$ echo $?
+0
+```
+```
+# Terminal 2 (started almost simultaneously)
+$ python crontabber.py --admin.conf=crontabber.ini
+$ echo $?
+3
+```
+
+**Note!** If a job has been ongoing to a maximum period of time, the
+locking is ignored. This is controlled by the config option
+`crontabber.max_ongoing_age_hours` which defaults to **12 hours**.
+This is applicable if crontabber, updates the state that it's starting
+a job, then when it tries to update the state that it finished (successfully
+or not) and that write fails, if for example it's unable to make a
+connection to PostgreSQL. If this happens crontabber will just ignore
+the lock and run it anyway.
