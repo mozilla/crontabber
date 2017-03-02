@@ -7,7 +7,7 @@ import os
 # Prevent spurious errors during `python setup.py test`, a la
 # http://www.eby-sarna.com/pipermail/peak/2010-May/003357.html:
 try:
-    import multiprocessing
+    import multiprocessing  # noqa
 except ImportError:
     pass
 
@@ -40,17 +40,6 @@ def find_tests_require():
             if x.strip() and not x.startswith('#')]
 
 
-try:
-    import pypandoc
-    README = pypandoc.convert('README.md', 'rst')
-except (IOError, ImportError, OSError, RuntimeError) as x:
-    import sys
-    print >> sys.stderr, "Unable to convert README.md to reStructuredText"
-    print >> sys.stderr, sys.exc_info()[0]
-    print >> sys.stderr, x
-    README = read('README.md')
-
-
 setup(
     name='crontabber',
     entry_points={
@@ -61,7 +50,7 @@ setup(
     author='Peter Bengtsson',
     author_email='peterbe@mozilla.com',
     description="A cron job runner with self-healing and job dependencies.",
-    long_description=README,
+    long_description=read('README.rst'),
     packages=['crontabber', 'crontabber.tests'],
     include_package_data=True,
     install_requires=find_install_requires(),
