@@ -6,6 +6,8 @@
 crontabber
 ==========
 
+Note (2021-09-07): This project is no longer maintained.
+
 ``crontabber`` is a cron job manager. Written in Python. Uses PostgreSQL for storage.
 
 Killer features include:
