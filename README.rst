@@ -5,9 +5,8 @@ A cron job runner with self-healing and job dependencies.
 
 License: `MPL 2 <http://www.mozilla.org/MPL/2.0/>`__
 
-|Coverage Status|
+Note (2021-09-07): This project is no longer maintained.
 
-|Build Status|
 
 How to run tests
 ----------------
